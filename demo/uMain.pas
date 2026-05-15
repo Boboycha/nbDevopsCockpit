@@ -7,7 +7,7 @@ uses
   FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs, System.Skia,
   System.Actions, FMX.ActnList, ModernSSHClient, FMX.Skia, Terminal.Control,
   FMX.StdCtrls, FMX.Controls.Presentation,  GoghThemeLoader,
-  FMX.ListBox;
+  FMX.ListBox,  FMX.Edit;
 
 type
   TForm1 = class(TForm)
@@ -21,11 +21,22 @@ type
     lblTheme: TLabel;
     cbTheme: TComboBox;
     btnBrowse: TCornerButton;
+    lblHost: TLabel;
+    edHost: TEdit;
+    lblPort: TLabel;
+    edPort: TEdit;
+    lblUser: TLabel;
+    edUser: TEdit;
+    lblKey: TLabel;
+    edKeyPath: TEdit;
+    btnBrowseKey: TCornerButton;
+    odKey: TOpenDialog;
     procedure FormCreate(Sender: TObject);
     procedure Button1Click(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure BrowseThemeClick(Sender: TObject);
     procedure cbThemeChange(Sender: TObject);
+    procedure BrowseKeyClick(Sender: TObject);
   private
     FThemes: TGoghThemeInfoArray;
     procedure SSHConnecting(Sender: TObject);
@@ -45,6 +56,32 @@ implementation
 
 procedure TForm1.Button1Click(Sender: TObject);
 begin
+  SSHClient1.Host := Trim(edHost.Text);
+  SSHClient1.Port := Trim(edPort.Text);
+  SSHClient1.User := Trim(edUser.Text);
+  SSHClient1.KeyPath := Trim(edKeyPath.Text);
+
+  if SSHClient1.Host = '' then
+  begin
+    ShowMessage('Укажите хост для подключения.');
+    edHost.SetFocus;
+    Exit;
+  end;
+
+  if SSHClient1.User = '' then
+  begin
+    ShowMessage('Укажите имя пользователя.');
+    edUser.SetFocus;
+    Exit;
+  end;
+
+  if SSHClient1.Port = '' then
+  begin
+    ShowMessage('Укажите порт SSH.');
+    edPort.SetFocus;
+    Exit;
+  end;
+
   SSHClient1.Connect;
 end;
 
@@ -58,6 +95,16 @@ begin
   odTheme.Filter := 'Темы Gogh (*.yml;*.yaml)|*.yml;*.yaml|Все файлы (*.*)|*.*';
   if not odTheme.Execute then Exit;
   TerminalControl1.LoadThemeFromFile(odTheme.FileName);
+  TerminalControl1.SetFocus;
+end;
+
+procedure TForm1.BrowseKeyClick(Sender: TObject);
+begin
+  odKey.Filter := 'Приватные ключи (*.pem;*.key;id_*)|*.pem;*.key;id_*|Все файлы (*.*)|*.*';
+  if edKeyPath.Text <> '' then
+    odKey.FileName := edKeyPath.Text;
+  if not odKey.Execute then Exit;
+  edKeyPath.Text := odKey.FileName;
   TerminalControl1.SetFocus;
 end;
 
@@ -147,6 +194,14 @@ begin
 
   // Начальное состояние кнопок
   CornerButton2.Enabled := False;
+  SSHClient1.Host := '';
+  SSHClient1.Port := '22';
+  SSHClient1.User := '';
+  SSHClient1.KeyPath := '';
+  edHost.Text := '';
+  edPort.Text := SSHClient1.Port;
+  edUser.Text := '';
+  edKeyPath.Text := '';
 
   // Рядом с exe (деплой); при разработке — в репозитории demo\themes\
   ThemesDir := ExtractFilePath(ParamStr(0)) + 'themes\';

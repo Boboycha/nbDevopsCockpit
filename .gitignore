@@ -18,6 +18,7 @@ __astcache/
 *.~*
 bin/
 dcu/
+dist/
 lib/Win32/
 lib/Win64/
 

@@ -13,7 +13,7 @@ object Form1: TForm1
     Align = Client
     HitTest = True
     Size.Width = 640.000000000000000000
-    Size.Height = 447.000000000000000000
+    Size.Height = 416.000000000000000000
     Size.PlatformDefault = False
     FontSize = 13.000000000000000000
     FontFamily = 'Source Code Pro'
@@ -26,12 +26,12 @@ object Form1: TForm1
   object Panel1: TPanel
     Align = MostTop
     Size.Width = 640.000000000000000000
-    Size.Height = 33.000000000000000000
+    Size.Height = 64.000000000000000000
     Size.PlatformDefault = False
     TabOrder = 0
     object CornerButton1: TCornerButton
       Position.X = 4.000000000000000000
-      Position.Y = 5.000000000000000000
+      Position.Y = 36.000000000000000000
       Sides = [Top, Left, Bottom, Right]
       Size.Width = 90.000000000000000000
       Size.Height = 22.000000000000000000
@@ -45,7 +45,7 @@ object Form1: TForm1
     end
     object CornerButton2: TCornerButton
       Position.X = 98.000000000000000000
-      Position.Y = 5.000000000000000000
+      Position.Y = 36.000000000000000000
       Sides = [Top, Left, Bottom, Right]
       Size.Width = 90.000000000000000000
       Size.Height = 22.000000000000000000
@@ -59,7 +59,7 @@ object Form1: TForm1
     end
     object lblTheme: TLabel
       Position.X = 200.000000000000000000
-      Position.Y = 8.000000000000000000
+      Position.Y = 39.000000000000000000
       Size.Width = 45.000000000000000000
       Size.Height = 17.000000000000000000
       Size.PlatformDefault = False
@@ -67,7 +67,7 @@ object Form1: TForm1
     end
     object cbTheme: TComboBox
       Position.X = 248.000000000000000000
-      Position.Y = 5.000000000000000000
+      Position.Y = 36.000000000000000000
       Size.Width = 190.000000000000000000
       Size.Height = 22.000000000000000000
       Size.PlatformDefault = False
@@ -76,7 +76,7 @@ object Form1: TForm1
     end
     object btnBrowse: TCornerButton
       Position.X = 442.000000000000000000
-      Position.Y = 5.000000000000000000
+      Position.Y = 36.000000000000000000
       Sides = [Top, Left, Bottom, Right]
       Size.Width = 30.000000000000000000
       Size.Height = 22.000000000000000000
@@ -88,14 +88,97 @@ object Form1: TForm1
       YRadius = 3.000000000000000000
       OnClick = BrowseThemeClick
     end
+    object lblHost: TLabel
+      Position.X = 4.000000000000000000
+      Position.Y = 8.000000000000000000
+      Size.Width = 34.000000000000000000
+      Size.Height = 17.000000000000000000
+      Size.PlatformDefault = False
+      Text = #1061#1086#1089#1090':'
+    end
+    object edHost: TEdit
+      Touch.InteractiveGestures = [LongTap, DoubleTap]
+      TabOrder = 4
+      Position.X = 42.000000000000000000
+      Position.Y = 5.000000000000000000
+      Size.Width = 108.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+    end
+    object lblPort: TLabel
+      Position.X = 158.000000000000000000
+      Position.Y = 8.000000000000000000
+      Size.Width = 35.000000000000000000
+      Size.Height = 17.000000000000000000
+      Size.PlatformDefault = False
+      Text = #1055#1086#1088#1090':'
+    end
+    object edPort: TEdit
+      Touch.InteractiveGestures = [LongTap, DoubleTap]
+      TabOrder = 5
+      Position.X = 196.000000000000000000
+      Position.Y = 5.000000000000000000
+      Size.Width = 42.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+    end
+    object lblUser: TLabel
+      Position.X = 246.000000000000000000
+      Position.Y = 8.000000000000000000
+      Size.Width = 88.000000000000000000
+      Size.Height = 17.000000000000000000
+      Size.PlatformDefault = False
+      Text = #1055#1086#1083#1100#1079#1086#1074#1072#1090#1077#1083#1100':'
+    end
+    object edUser: TEdit
+      Touch.InteractiveGestures = [LongTap, DoubleTap]
+      TabOrder = 6
+      Position.X = 338.000000000000000000
+      Position.Y = 5.000000000000000000
+      Size.Width = 74.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+    end
+    object lblKey: TLabel
+      Position.X = 420.000000000000000000
+      Position.Y = 8.000000000000000000
+      Size.Width = 34.000000000000000000
+      Size.Height = 17.000000000000000000
+      Size.PlatformDefault = False
+      Text = #1050#1083#1102#1095':'
+    end
+    object edKeyPath: TEdit
+      Touch.InteractiveGestures = [LongTap, DoubleTap]
+      TabOrder = 7
+      Position.X = 458.000000000000000000
+      Position.Y = 5.000000000000000000
+      Size.Width = 146.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+    end
+    object btnBrowseKey: TCornerButton
+      Position.X = 608.000000000000000000
+      Position.Y = 5.000000000000000000
+      Sides = [Top, Left, Bottom, Right]
+      Size.Width = 28.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 8
+      Text = '...'
+      TextSettings.Trimming = None
+      XRadius = 3.000000000000000000
+      YRadius = 3.000000000000000000
+      OnClick = BrowseKeyClick
+    end
+  end
+  object odKey: TOpenDialog
+    Left = 352
+    Top = 216
   end
   object SSHClient1: TnbSSHClient
-    Host = '192.168.100.32'
     Port = '22'
-    User = 'root'
-    KeyPath = 'C:\Users\nbhas\.ssh\Rocky'
     InitialCols = 80
-    InitialRows = 27
+    InitialRows = 26
     Left = 448
     Top = 176
   end
