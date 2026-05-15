@@ -5,6 +5,10 @@
 A **Delphi / FireMonkey (FMX)** component package for building DevOps tooling.
 Cross-platform — Windows, Linux, macOS. Rendering powered by [Skia](https://skia.org/).
 
+## Demo
+
+A ready-to-run Windows x64 portable demo is published in [GitHub Releases](https://github.com/Boboycha/nbDevopsCockpit/releases/tag/demo-latest). The archive contains `nbDevOpsCockpitDemo.exe`, `libssh2.dll`, `sk4d.dll`, and terminal themes.
+
 ## Contents
 
 | Component | Purpose |

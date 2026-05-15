@@ -1,16 +1,16 @@
-program Project1;
+program nbDevOpsCockpitDemo;
 
 uses
   System.StartUpCopy,
   FMX.Forms,
   FMX.Skia,
-  uMain in 'uMain.pas' {Form1};
+  uDemoMain in 'uDemoMain.pas' {DemoForm};
 
 {$R *.res}
 
 begin
   GlobalUseSkia := True;
   Application.Initialize;
-  Application.CreateForm(TForm1, Form1);
+  Application.CreateForm(TDemoForm, DemoForm);
   Application.Run;
 end.

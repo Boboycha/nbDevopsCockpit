@@ -1,4 +1,4 @@
-﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{CD210ECB-B844-43C7-8AFC-C5B67E4D4E41}</ProjectGuid>
     </PropertyGroup>
@@ -6,7 +6,7 @@
         <Projects Include="src\nbDevOpsCockpit.dproj">
             <Dependencies/>
         </Projects>
-        <Projects Include="demo\Project1.dproj">
+        <Projects Include="demo\nbDevOpsCockpitDemo.dproj">
             <Dependencies/>
         </Projects>
     </ItemGroup>
@@ -26,23 +26,23 @@
     <Target Name="nbDevOpsCockpit:Make">
         <MSBuild Projects="src\nbDevOpsCockpit.dproj" Targets="Make"/>
     </Target>
-    <Target Name="Project1">
-        <MSBuild Projects="demo\Project1.dproj"/>
+    <Target Name="nbDevOpsCockpitDemo">
+        <MSBuild Projects="demo\nbDevOpsCockpitDemo.dproj"/>
     </Target>
-    <Target Name="Project1:Clean">
-        <MSBuild Projects="demo\Project1.dproj" Targets="Clean"/>
+    <Target Name="nbDevOpsCockpitDemo:Clean">
+        <MSBuild Projects="demo\nbDevOpsCockpitDemo.dproj" Targets="Clean"/>
     </Target>
-    <Target Name="Project1:Make">
-        <MSBuild Projects="demo\Project1.dproj" Targets="Make"/>
+    <Target Name="nbDevOpsCockpitDemo:Make">
+        <MSBuild Projects="demo\nbDevOpsCockpitDemo.dproj" Targets="Make"/>
     </Target>
     <Target Name="Build">
-        <CallTarget Targets="nbDevOpsCockpit;Project1"/>
+        <CallTarget Targets="nbDevOpsCockpit;nbDevOpsCockpitDemo"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="nbDevOpsCockpit:Clean;Project1:Clean"/>
+        <CallTarget Targets="nbDevOpsCockpit:Clean;nbDevOpsCockpitDemo:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="nbDevOpsCockpit:Make;Project1:Make"/>
+        <CallTarget Targets="nbDevOpsCockpit:Make;nbDevOpsCockpitDemo:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

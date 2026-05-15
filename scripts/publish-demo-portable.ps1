@@ -8,14 +8,14 @@ param(
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$ProjectFile = Join-Path $RepoRoot "demo\Project1.dproj"
+$ProjectFile = Join-Path $RepoRoot "demo\nbDevOpsCockpitDemo.dproj"
 $OutputDir = Join-Path $RepoRoot "bin\demo\$Platform\$Configuration"
 $DistDir = Join-Path $RepoRoot "dist"
-$PackageRoot = Join-Path $RepoRoot "dist\nbDevopsCockpit-demo-$Platform-portable"
+$PackageRoot = Join-Path $RepoRoot "dist\nbDevOpsCockpitDemo-$Platform-portable"
 $ZipPath = "$PackageRoot.zip"
 
 if ($Tag -eq "") {
-  $Tag = "demo-" + (Get-Date -Format "yyyyMMdd-HHmm")
+  $Tag = "demo-latest"
 }
 
 [string[]]$RsVarsCandidates = @(
@@ -53,7 +53,7 @@ try {
   }
 
   New-Item -ItemType Directory -Path $PackageRoot | Out-Null
-  Copy-Item -LiteralPath (Join-Path $OutputDir "Project1.exe") -Destination $PackageRoot
+  Copy-Item -LiteralPath (Join-Path $OutputDir "nbDevOpsCockpitDemo.exe") -Destination $PackageRoot
   Copy-Item -LiteralPath (Join-Path $RepoRoot "vendor\win64\libssh2.dll") -Destination $PackageRoot
   Copy-Item -LiteralPath (Join-Path $RepoRoot "vendor\win64\sk4d.dll") -Destination $PackageRoot
   Copy-Item -LiteralPath (Join-Path $RepoRoot "demo\themes") -Destination (Join-Path $PackageRoot "themes") -Recurse
@@ -62,7 +62,12 @@ try {
   Write-Host "Portable package: $ZipPath"
 
   if ($Publish) {
-    gh release create $Tag $ZipPath --repo Boboycha/nbDevopsCockpit --title "Demo portable $Tag" --notes "Portable Win64 demo build."
+    if (gh release view $Tag --repo Boboycha/nbDevopsCockpit *> $null) {
+      gh release upload $Tag $ZipPath --repo Boboycha/nbDevopsCockpit --clobber
+    }
+    else {
+      gh release create $Tag $ZipPath --repo Boboycha/nbDevopsCockpit --title "Latest portable demo" --notes "Portable Win64 demo build."
+    }
   }
 }
 finally {
