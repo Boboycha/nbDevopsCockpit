@@ -62,7 +62,13 @@ try {
   Write-Host "Portable package: $ZipPath"
 
   if ($Publish) {
-    if (gh release view $Tag --repo Boboycha/nbDevopsCockpit *> $null) {
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    gh release view $Tag --repo Boboycha/nbDevopsCockpit *> $null
+    $ReleaseExists = ($LASTEXITCODE -eq 0)
+    $ErrorActionPreference = $PreviousErrorActionPreference
+
+    if ($ReleaseExists) {
       gh release upload $Tag $ZipPath --repo Boboycha/nbDevopsCockpit --clobber
     }
     else {
