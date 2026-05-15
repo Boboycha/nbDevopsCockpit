@@ -1,0 +1,43 @@
+# --- Delphi / RAD Studio ---
+
+# Резервные копии и автосейвы IDE
+__history/
+__recovery/
+__astcache/
+
+# Пользовательские/локальные файлы (у каждого разработчика свои)
+*.local
+*.identcache
+*.dsk
+*.tvsconfig
+*.delphilsp.json
+*.skincfg
+
+# Результаты компиляции
+*.dcu
+*.~*
+bin/
+dcu/
+lib/Win32/
+lib/Win64/
+
+# Бинарные артефакты
+*.exe
+*.dll
+*.bpl
+*.dcp
+*.map
+*.drc
+*.rsm
+*.o
+*.a
+*.so
+*.dylib
+
+# --- Редакторы / IDE ---
+# Содержит абсолютные пути конкретной машины
+.vscode/
+
+# --- ОС ---
+Thumbs.db
+.DS_Store

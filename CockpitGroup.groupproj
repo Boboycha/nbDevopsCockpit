@@ -1,0 +1,48 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{CD210ECB-B844-43C7-8AFC-C5B67E4D4E41}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="src\nbDevOpsCockpit.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="demo\Project1.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="nbDevOpsCockpit">
+        <MSBuild Projects="src\nbDevOpsCockpit.dproj"/>
+    </Target>
+    <Target Name="nbDevOpsCockpit:Clean">
+        <MSBuild Projects="src\nbDevOpsCockpit.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="nbDevOpsCockpit:Make">
+        <MSBuild Projects="src\nbDevOpsCockpit.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Project1">
+        <MSBuild Projects="demo\Project1.dproj"/>
+    </Target>
+    <Target Name="Project1:Clean">
+        <MSBuild Projects="demo\Project1.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="Project1:Make">
+        <MSBuild Projects="demo\Project1.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="nbDevOpsCockpit;Project1"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="nbDevOpsCockpit:Clean;Project1:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="nbDevOpsCockpit:Make;Project1:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>
