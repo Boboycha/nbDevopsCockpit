@@ -1,5 +1,7 @@
 # nbDevOpsCockpit
 
+**Русский** | [English](README.en.md)
+
 Пакет компонентов **Delphi / FireMonkey (FMX)** для построения DevOps-инструментов.
 Кросс-платформенный — Windows, Linux, macOS. Рендеринг на [Skia](https://skia.org/).
 
