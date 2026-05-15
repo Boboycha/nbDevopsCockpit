@@ -1,4 +1,4 @@
-unit GoghThemeLoader;
+﻿unit GoghThemeLoader;
 
 (*
   Загрузчик цветовых тем терминала из файлов формата Gogh (YAML).
@@ -15,7 +15,7 @@ unit GoghThemeLoader;
     color_02: '#ff5555'  # Red
     ...
     color_16: '#e6e6e6'  # Bright White
-
+                                    s
     background: '#282a36'
     foreground: '#f8f8f2'
     cursor: '#f8f8f0'

@@ -1,4 +1,4 @@
-unit uMain;
+﻿unit uMain;
 
 interface
 
@@ -6,7 +6,8 @@ uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
   FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs, System.Skia,
   System.Actions, FMX.ActnList, ModernSSHClient, FMX.Skia, Terminal.Control,
-  FMX.StdCtrls, FMX.Controls.Presentation;
+  FMX.StdCtrls, FMX.Controls.Presentation,  GoghThemeLoader,
+  FMX.ListBox;
 
 type
   TForm1 = class(TForm)
@@ -17,17 +18,22 @@ type
     odTheme: TOpenDialog;
     CornerButton1: TCornerButton;
     CornerButton2: TCornerButton;
-    procedure FormShow(Sender: TObject);
+    lblTheme: TLabel;
+    cbTheme: TComboBox;
+    btnBrowse: TCornerButton;
     procedure FormCreate(Sender: TObject);
     procedure Button1Click(Sender: TObject);
     procedure Button2Click(Sender: TObject);
-    procedure SSHClient1StatusChange(Sender: TObject; Status: TSSHStatus);
-    procedure SSHClient1Disconnected(Sender: TObject);
-    procedure CornerButton3Click(Sender: TObject);
+    procedure BrowseThemeClick(Sender: TObject);
+    procedure cbThemeChange(Sender: TObject);
   private
-    { Private declarations }
+    FThemes: TGoghThemeInfoArray;
+    procedure SSHConnecting(Sender: TObject);
+    procedure SSHConnected(Sender: TObject);
+    procedure SSHError(Sender: TObject; const Msg: string);
+    procedure SSHDisconnected(Sender: TObject);
+    procedure UpdateButtons;
   public
-    { Public declarations }
   end;
 
 var
@@ -47,42 +53,117 @@ begin
   SSHClient1.Disconnect;
 end;
 
-procedure TForm1.CornerButton3Click(Sender: TObject);
+procedure TForm1.BrowseThemeClick(Sender: TObject);
 begin
-  // Выбор файла темы и применение его к терминалу
+  odTheme.Filter := 'Темы Gogh (*.yml;*.yaml)|*.yml;*.yaml|Все файлы (*.*)|*.*';
   if not odTheme.Execute then Exit;
   TerminalControl1.LoadThemeFromFile(odTheme.FileName);
   TerminalControl1.SetFocus;
 end;
 
+procedure TForm1.cbThemeChange(Sender: TObject);
+var
+  Idx: Integer;
+begin
+  Idx := cbTheme.ItemIndex;
+  if Idx <= 0 then
+  begin
+    TerminalControl1.LoadDefaultTheme;
+    TerminalControl1.SetFocus;
+    Exit;
+  end;
+  Dec(Idx);  // 0 = «По умолчанию», поэтому сдвигаем на один
+  if Idx < Length(FThemes) then
+    TerminalControl1.LoadThemeFromFile(FThemes[Idx].FileName);
+  TerminalControl1.SetFocus;
+end;
+
+// --- Обновление состояния кнопок ---
+
+procedure TForm1.UpdateButtons;
+begin
+  case SSHClient1.Status of
+    ssIdle:
+      begin
+        CornerButton1.Enabled := True;
+        CornerButton2.Enabled := False;
+      end;
+    ssConnecting, ssAuthenticating:
+      begin
+        CornerButton1.Enabled := False;
+        CornerButton2.Enabled := False;
+      end;
+    ssConnected:
+      begin
+        CornerButton1.Enabled := False;
+        CornerButton2.Enabled := True;
+      end;
+    ssError:
+      begin
+        CornerButton1.Enabled := True;
+        CornerButton2.Enabled := False;
+      end;
+  end;
+end;
+
+procedure TForm1.SSHConnecting(Sender: TObject);
+begin
+  UpdateButtons;
+end;
+
+procedure TForm1.SSHConnected(Sender: TObject);
+begin
+  UpdateButtons;
+end;
+
+procedure TForm1.SSHError(Sender: TObject; const Msg: string);
+begin
+  UpdateButtons;
+  // Ошибка уже выводится в терминал через TnbTerminalControl.HandleSSHStatusChange
+end;
+
+procedure TForm1.SSHDisconnected(Sender: TObject);
+begin
+  UpdateButtons;
+  // Намеренно НЕ вызываем TerminalControl1.Clear — содержимое терминала
+  // (включая сообщения об ошибках) должно остаться видимым после отключения.
+end;
+
+// --- Инициализация ---
+
 procedure TForm1.FormCreate(Sender: TObject);
+var
+  I: Integer;
+  ThemesDir: string;
 begin
   TerminalControl1.TabStop := True;
   TerminalControl1.CanFocus := True;
-end;
 
-procedure TForm1.FormShow(Sender: TObject);
-var
-  Btn: TCornerButton;
-begin
-  // Кнопка "ApplyTheme" живёт в стиле рамки окна — привязываем обработчик в рантайме
-  Btn := Border.WindowBorder.FindStyleResource('ApplyTheme') as TCornerButton;
-  if Assigned(Btn) then
-    Btn.OnClick := CornerButton3Click;
-end;
+  // Подписываемся на отдельные события SSH — OnStatusChange занят TerminalControl1
+  SSHClient1.OnConnecting   := SSHConnecting;
+  SSHClient1.OnConnected    := SSHConnected;
+  SSHClient1.OnError        := SSHError;
+  SSHClient1.OnDisconnected := SSHDisconnected;
 
-procedure TForm1.SSHClient1Disconnected(Sender: TObject);
-begin
-  TerminalControl1.Clear;
-end;
+  // Начальное состояние кнопок
+  CornerButton2.Enabled := False;
 
-procedure TForm1.SSHClient1StatusChange(Sender: TObject; Status: TSSHStatus);
-begin
-  if Status = ssIdle then
-  begin
-    // Сессия завершена — очищаем экран терминала
-    TerminalControl1.Clear;
+  // Рядом с exe (деплой); при разработке — в репозитории demo\themes\
+  ThemesDir := ExtractFilePath(ParamStr(0)) + 'themes\';
+  if not DirectoryExists(ThemesDir) then
+    ThemesDir := ExpandFileName(ExtractFilePath(ParamStr(0)) +
+      '..\..\..\..\demo\themes\');
+  FThemes := TnbTerminalControl.EnumThemes(ThemesDir);
+
+  cbTheme.Items.BeginUpdate;
+  try
+    cbTheme.Items.Add('По умолчанию');
+    for I := 0 to High(FThemes) do
+      cbTheme.Items.Add(FThemes[I].Name);
+  finally
+    cbTheme.Items.EndUpdate;
   end;
+  cbTheme.ItemIndex := 0;
 end;
 
 end.

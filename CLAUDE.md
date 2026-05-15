@@ -50,10 +50,43 @@ demo/   — демо-приложение FMX (Project1)
 `libssh2 → TnbSSHClient → AnsiParser → Buffer → Renderer → TnbTerminalControl`
 и обратно (ввод/resize → SSH).
 
+## Демо-приложение (demo/)
+
+Панель управления (`Panel1`, высота 33 px) содержит:
+- **«Подключить» / «Отключить»** — `TCornerButton`, обёртки над `SSHClient1.Connect/Disconnect`.
+- **Комбобокс `cbTheme`** (`FMX.ListBox.TComboBox`) — перечисляет темы Gogh из папки `themes\`.
+  Первый пункт «По умолчанию» вызывает `TnbTerminalControl.LoadDefaultTheme`.
+  Последующие пункты — `LoadThemeFromFile` по `FThemes[Idx].FileName`.
+- **Кнопка `...` (`btnBrowse`)** — открывает `TOpenDialog` для загрузки произвольного `.yml`.
+
+Логика поиска папки с темами (`FormCreate`):
+1. `<exe_dir>\themes\` — для развёрнутого приложения.
+2. `ExpandFileName(<exe_dir> + '..\..\..\..\demo\themes\')` — запасной путь при запуске
+   из `bin\demo\Win64\Debug\` во время разработки (ведёт в `demo\themes\` репозитория).
+
+В `demo/themes/` хранятся 365 `.yml`-файлов тем из проекта
+[Gogh](https://github.com/Gogh-Co/Gogh); папка отслеживается в git.
+
+### Зависимость libssh2.dll
+
+`TnbSSHClient` загружает `libssh2.dll` динамически через `SafeLoadLibrary`.
+DLL нет в репозитории (`*.dll` в `.gitignore`). Для работы демо файл нужно
+разместить рядом с `Project1.exe`.
+
+Проверенная сборка: **WinCNG-backend** (зависит только от системных DLL Windows —
+`bcrypt.dll`, `ws2_32.dll` и т.д.; OpenSSL не нужен). Такая сборка есть, например,
+в установленном Termius:
+`%LOCALAPPDATA%\Programs\Termius\resources\app.asar.unpacked\node_modules\@termius\libtermius\win-x64\libssh2.dll`
+
 ## Сборка и проверка
 
 - Проект собирается в RAD Studio (`src/nbDevOpsCockpit.dpk`, демо `demo/Project1.dproj`).
-- Автоматических тестов нет; CLI-сборки в репозитории нет.
+- Поддерживается CLI-сборка через MSBuild:
+  ```
+  call "C:\Program Files (x86)\Embarcadero\Studio\23.0\bin\rsvars.bat"
+  msbuild demo\Project1.dproj /t:Build /p:Config=Debug /p:Platform=Win64
+  ```
+- Автоматических тестов нет.
 - После правок проверять корректность по диагностике Delphi LSP (если доступна).
 
 ## На что обращать внимание
@@ -65,3 +98,8 @@ demo/   — демо-приложение FMX (Project1)
   архитектурная особенность; демо линкует юниты статически.
 - Не коммитить файлы с абсолютными путями машины (`.vscode/`, `*.local`,
   `*.delphilsp.json`) — они уже в `.gitignore`.
+- `TCharacter` (устарел с Delphi 12) заменён на `TCharHelper`: методы вызываются
+  прямо на переменной типа `Char` — `Ch.IsHighSurrogate`, `Ch.IsLowSurrogate`.
+  Юнит `System.Character` в `uses` при этом остаётся обязательным.
+- `TComboBox` в FMX находится в `FMX.ListBox`, а не в `FMX.StdCtrls`.
+  Это неочевидно: в палитре IDE он в группе «Standard», но юнит другой.

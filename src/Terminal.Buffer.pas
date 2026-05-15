@@ -671,8 +671,8 @@ begin
     S := S + Ch;
     Inc(I);
     // Если суррогатная пара, берем второй символ
-    if TCharacter.IsHighSurrogate(Ch) and (I <= Length(Text)) and
-      TCharacter.IsLowSurrogate(Text[I]) then
+    if Ch.IsHighSurrogate and (I <= Length(Text)) and
+      Text[I].IsLowSurrogate then
     begin
       S := S + Text[I];
       Inc(I);
@@ -1375,7 +1375,7 @@ end;
 
 function TTerminalBuffer.GetSelectedText: string;
 var
-  Y, X, StartX, EndX, AbsY, SBCount: Integer;
+  X, StartX, EndX, AbsY, SBCount: Integer;
   Line: TTerminalLine;
   ResultStr: TStringBuilder;
   

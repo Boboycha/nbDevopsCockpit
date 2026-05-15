@@ -41,8 +41,6 @@ type
     FG1: TCharacterSet;
     FUseG1: Boolean;
 
-    function GetParamInt(const S: string; Index: Integer;
-      Default: Integer = 1): Integer;
     procedure ParseSGR(const Params: TArray<Integer>);
     function GetColor256(Index: Integer): TAlphaColor;
     function GetColorRGB(R, G, B: Integer): TAlphaColor;
@@ -162,18 +160,6 @@ begin
   else
     Result := string(Ch);
   end;
-end;
-
-function TAnsiParser.GetParamInt(const S: string; Index: Integer;
-  Default: Integer): Integer;
-var
-  Parts: TArray<string>;
-begin
-  Parts := S.Split([';']);
-  if (Index >= 0) and (Index < Length(Parts)) and (Parts[Index] <> '') then
-    Result := StrToIntDef(Parts[Index], Default)
-  else
-    Result := Default;
 end;
 
 function TAnsiParser.GetColor256(Index: Integer): TAlphaColor;
@@ -324,10 +310,10 @@ begin
   Result := Result + Ch;
   Inc(Index);
 
-  if TCharacter.IsHighSurrogate(Ch) and (Index <= Length(Input)) then
+  if Ch.IsHighSurrogate and (Index <= Length(Input)) then
   begin
     NextCh := Input[Index];
-    if TCharacter.IsLowSurrogate(NextCh) then
+    if NextCh.IsLowSurrogate then
     begin
       Result := Result + NextCh;
       Inc(Index);
@@ -348,8 +334,8 @@ begin
         Ch := Input[Index];
         Result := Result + Ch;
         Inc(Index);
-        if TCharacter.IsHighSurrogate(Ch) and (Index <= Length(Input)) and
-          TCharacter.IsLowSurrogate(Input[Index]) then
+        if Ch.IsHighSurrogate and (Index <= Length(Input)) and
+          Input[Index].IsLowSurrogate then
         begin
           Result := Result + Input[Index];
           Inc(Index);

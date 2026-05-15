@@ -622,7 +622,7 @@ begin
 
   if OverrideSelection then Exit;
 
-  if FBuffer.MouseModes = [] then
+  if not IsMouseReporting then
     Exit;
 
   if not (mtm1006_SGR in FBuffer.MouseModes) and
@@ -650,7 +650,6 @@ end;
 procedure TnbTerminalControl.MouseMove(Shift: TShiftState; X, Y: Single);
 var
   Col, Row, Cb, AbsY: Integer;
-  IsMouseReporting: Boolean;
   OverrideSelection: Boolean;
 begin
   if (FRenderer.CharWidth = 0) or (FRenderer.CharHeight = 0) then Exit;
@@ -671,7 +670,6 @@ begin
     Exit;
   end;
 
-  IsMouseReporting := FBuffer.MouseModes <> [];
   OverrideSelection := (ssShift in Shift);
 
   if OverrideSelection then

@@ -8,7 +8,6 @@ object Form1: TForm1
   FormFactor.Height = 480
   FormFactor.Devices = [Desktop]
   OnCreate = FormCreate
-  OnShow = FormShow
   DesignerMasterStyle = 0
   object TerminalControl1: TnbTerminalControl
     Align = Client
@@ -31,41 +30,77 @@ object Form1: TForm1
     Size.PlatformDefault = False
     TabOrder = 0
     object CornerButton1: TCornerButton
-      Position.X = 48.000000000000000000
-      Position.Y = 3.000000000000000000
+      Position.X = 4.000000000000000000
+      Position.Y = 5.000000000000000000
       Sides = [Top, Left, Bottom, Right]
-      TabOrder = 1
-      Text = 'CornerButton1'
+      Size.Width = 90.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 0
+      Text = #1055#1086#1076#1082#1083#1102#1095#1080#1090#1100
+      TextSettings.Trimming = None
       XRadius = 3.000000000000000000
       YRadius = 3.000000000000000000
       OnClick = Button1Click
     end
     object CornerButton2: TCornerButton
-      Position.X = 136.000000000000000000
-      Position.Y = 3.000000000000000000
+      Position.X = 98.000000000000000000
+      Position.Y = 5.000000000000000000
       Sides = [Top, Left, Bottom, Right]
-      Size.Width = 113.000000000000000000
+      Size.Width = 90.000000000000000000
       Size.Height = 22.000000000000000000
       Size.PlatformDefault = False
-      TabOrder = 0
-      Text = 'CornerButton1'
+      TabOrder = 1
+      Text = #1054#1090#1082#1083#1102#1095#1080#1090#1100
+      TextSettings.Trimming = None
       XRadius = 3.000000000000000000
       YRadius = 3.000000000000000000
+      OnClick = Button2Click
+    end
+    object lblTheme: TLabel
+      Position.X = 200.000000000000000000
+      Position.Y = 8.000000000000000000
+      Size.Width = 45.000000000000000000
+      Size.Height = 17.000000000000000000
+      Size.PlatformDefault = False
+      Text = #1058#1077#1084#1099':'
+    end
+    object cbTheme: TComboBox
+      Position.X = 248.000000000000000000
+      Position.Y = 5.000000000000000000
+      Size.Width = 190.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 2
+      OnChange = cbThemeChange
+    end
+    object btnBrowse: TCornerButton
+      Position.X = 442.000000000000000000
+      Position.Y = 5.000000000000000000
+      Sides = [Top, Left, Bottom, Right]
+      Size.Width = 30.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 3
+      Text = '...'
+      TextSettings.Trimming = None
+      XRadius = 3.000000000000000000
+      YRadius = 3.000000000000000000
+      OnClick = BrowseThemeClick
     end
   end
   object SSHClient1: TnbSSHClient
-    Host = '172.16.24.237'
+    Host = '192.168.100.32'
     Port = '22'
     User = 'root'
-    KeyPath = 'local_private.key'
+    KeyPath = 'C:\Users\nbhas\.ssh\Rocky'
     InitialCols = 80
     InitialRows = 27
-    OnDisconnected = SSHClient1Disconnected
     Left = 448
     Top = 176
   end
   object ActionList1: TActionList
-    Left = 512
-    Top = 384
+    Left = 504
+    Top = 352
   end
 end
