@@ -9,6 +9,8 @@ Cross-platform — Windows, Linux, macOS. Rendering powered by [Skia](https://sk
 
 A ready-to-run Windows x64 portable demo is published in [GitHub Releases](https://github.com/Boboycha/nbDevopsCockpit/releases/tag/demo-latest). The archive contains `nbDevOpsCockpitDemo.exe`, `libssh2.dll`, `sk4d.dll`, and terminal themes.
 
+[Download portable demo](https://github.com/Boboycha/nbDevopsCockpit/releases/download/demo-latest/nbDevOpsCockpitDemo-Win64-portable.zip)
+
 ## Contents
 
 | Component | Purpose |

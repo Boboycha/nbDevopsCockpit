@@ -9,6 +9,8 @@
 
 Готовая portable-сборка демо для Windows x64 публикуется в [GitHub Releases](https://github.com/Boboycha/nbDevopsCockpit/releases/tag/demo-latest). Архив содержит `nbDevOpsCockpitDemo.exe`, `libssh2.dll`, `sk4d.dll` и темы терминала.
 
+[Скачать portable demo](https://github.com/Boboycha/nbDevopsCockpit/releases/download/demo-latest/nbDevOpsCockpitDemo-Win64-portable.zip)
+
 ## Состав
 
 | Компонент | Назначение |
