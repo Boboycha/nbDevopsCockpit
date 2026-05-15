@@ -44,6 +44,8 @@ type
     function GetFontForStyle(Bold, Italic: Boolean): ISkFont;
     procedure CheckBackBuffer(Width, Height: Integer);
     function GetCursorRect: TRectF;
+    procedure SetScale(const Value: Single);
+    function SnapToPixel(const Value: Single): Single;
 
     procedure RenderBoxDrawingChar(Canvas: ISkCanvas; Ch: string;
       X, Y, W, H: Single; Color: TAlphaColor);
@@ -70,6 +72,7 @@ type
     property FontFamily: string read FFontFamily write FFontFamily;
     property FontSize: Single read FFontSize write FFontSize;
     property ShowCursor: Boolean read FShowCursor write FShowCursor;
+    property Scale: Single read FScaleX write SetScale;
   end;
 
 implementation
@@ -125,35 +128,61 @@ begin
   FResourcesValid := False;
 end;
 
+procedure TTerminalRenderer.SetScale(const Value: Single);
+begin
+  if FScaleX <> Value then
+  begin
+    FScaleX := Value;
+    FScaleY := Value;
+    MeasureChar;
+    FBackBufferWidth  := 0;
+    FBackBufferHeight := 0;
+    FBuffer.SetAllDirty;
+  end;
+end;
+
+function TTerminalRenderer.SnapToPixel(const Value: Single): Single;
+begin
+  if FScaleX <= 0 then
+    Result := Value
+  else
+    Result := Round(Value * FScaleX) / FScaleX;
+end;
+
 procedure TTerminalRenderer.UpdateResources;
 var
   Typeface: ISkTypeface;
+  EffectiveFontSize: Single;
   
   procedure ConfigureFont(Font: ISkFont);
   begin
-    Font.Edging   := TSkFontEdging.SubpixelAntiAlias;  (* ClearType-стиль *)
-    Font.Hinting  := TSkFontHinting.Full;              (* Full даёт чёткость *)
-    Font.Subpixel := true;                            (* позиции на целых пикселях *)
+    Font.Edging   := TSkFontEdging.AntiAlias;
+    Font.Hinting  := TSkFontHinting.Full;
+    Font.Subpixel := True;
   end;
 
 begin
   if FResourcesValid then
     Exit;
+  EffectiveFontSize := FFontSize;
+  if FScaleX > 0 then
+    EffectiveFontSize := Max(1, Round(FFontSize * FScaleX)) / FScaleX;
+
   Typeface := TSkTypeface.MakeFromName(FFontFamily, TSkFontStyle.Normal);
 //Typeface := TSkTypeface.MakeFromName(FFontFamily, TSkFontStyle.Create(
 //  Integer(TSkFontWeight.Medium), Integer(TSkFontWidth.Normal),
 //  TSkFontSlant.Upright));
 
-  FCachedFontNormal := TSkFont.Create(Typeface, FFontSize);
+  FCachedFontNormal := TSkFont.Create(Typeface, EffectiveFontSize);
   ConfigureFont(FCachedFontNormal);
   Typeface := TSkTypeface.MakeFromName(FFontFamily, TSkFontStyle.Bold);
-  FCachedFontBold := TSkFont.Create(Typeface, FFontSize);
+  FCachedFontBold := TSkFont.Create(Typeface, EffectiveFontSize);
   ConfigureFont(FCachedFontBold);
   Typeface := TSkTypeface.MakeFromName(FFontFamily, TSkFontStyle.Italic);
-  FCachedFontItalic := TSkFont.Create(Typeface, FFontSize);
+  FCachedFontItalic := TSkFont.Create(Typeface, EffectiveFontSize);
   ConfigureFont(FCachedFontItalic);
   Typeface := TSkTypeface.MakeFromName(FFontFamily, TSkFontStyle.BoldItalic);
-  FCachedFontBoldItalic := TSkFont.Create(Typeface, FFontSize);
+  FCachedFontBoldItalic := TSkFont.Create(Typeface, EffectiveFontSize);
   ConfigureFont(FCachedFontBoldItalic);
   FResourcesValid := True;
 end;
@@ -182,18 +211,16 @@ begin
   RealWidth := FCachedFontNormal.MeasureText('W');
   if RealWidth < 1 then
     RealWidth := 8;
-  FCharWidth := Round(RealWidth);   (* целые пиксели - нужно для чёткости и псевдографики *)
+  FCharWidth := SnapToPixel(RealWidth);   (* целые физические пиксели - нужно для чёткости и псевдографики *)
   if FCharWidth < 1 then
     FCharWidth := 8;
 
   RealHeight := Abs(Metrics.Ascent) + Metrics.Descent;
-  FCharHeight := Round(RealHeight); (* целые пиксели *)
+  FCharHeight := SnapToPixel(RealHeight); (* целые физические пиксели *)
   if FCharHeight < 1 then
     FCharHeight := 12;
 
-  FScaleX := 1.0;                   (* НЕ масштабируем текст - это даёт чёткость *)
-  FScaleY := 1.0;
-  FAscentOffset := Abs(Metrics.Ascent);
+  FAscentOffset := SnapToPixel(Abs(Metrics.Ascent));
 end;
 
 function TTerminalRenderer.GetEffectiveForeground(const Attr: TCharAttributes): TAlphaColor;
@@ -207,12 +234,16 @@ begin
 end;
 
 procedure TTerminalRenderer.CheckBackBuffer(Width, Height: Integer);
+var
+  PhysW, PhysH: Integer;
 begin
-  if (FBackBuffer = nil) or (FBackBufferWidth <> Width) or
-    (FBackBufferHeight <> Height) then
+  PhysW := Max(1, Round(Width  * FScaleX));
+  PhysH := Max(1, Round(Height * FScaleX));
+  if (FBackBuffer = nil) or (FBackBufferWidth <> PhysW) or
+    (FBackBufferHeight <> PhysH) then
   begin
-    FBackBufferWidth := Width;
-    FBackBufferHeight := Height;
+    FBackBufferWidth  := PhysW;
+    FBackBufferHeight := PhysH;
     FBackBuffer := TSkSurface.MakeRaster(FBackBufferWidth, FBackBufferHeight);
     FBuffer.GetAndResetVisualScrollDelta;
     FBuffer.SetAllDirty;
@@ -338,14 +369,17 @@ begin
   else
     FTextLayout.Font.Family := FFontFamily;
 
-  FTextLayout.Font.Size := FFontSize;
+  if FScaleX > 0 then
+    FTextLayout.Font.Size := Max(1, Round(FFontSize * FScaleX)) / FScaleX
+  else
+    FTextLayout.Font.Size := FFontSize;
   FTextLayout.Color := Color;
   FTextLayout.WordWrap := False;
   FTextLayout.HorizontalAlign := TTextAlign.Leading;
   FTextLayout.VerticalAlign := TTextAlign.Leading;
 
-  BmpW := Round(W);
-  BmpH := Round(FCharHeight * 1.5);
+  BmpW := Max(1, Round(W));
+  BmpH := Max(1, Round(FCharHeight * 1.5));
   if (FEmojiBitmap.Width < BmpW) or (FEmojiBitmap.Height < BmpH) then
     FEmojiBitmap.SetSize(BmpW, BmpH);
   FEmojiBitmap.Clear(0);
@@ -383,7 +417,7 @@ begin
     Exit;
     
   Line := FBuffer.GetRenderLine(LineIndex);
-  Y := Floor(Bounds.Top + OffsetY + (LineIndex * FCharHeight));
+  Y := SnapToPixel(Bounds.Top + OffsetY + (LineIndex * FCharHeight));
   
   // Очистка строки фоном
   FCachedPaint.Style := TSkPaintStyle.Fill;
@@ -442,7 +476,7 @@ begin
     end;
     
     RunLen := I - RunStart;
-    RunX := Bounds.Left + (RunStart * FCharWidth);
+    RunX := SnapToPixel(Bounds.Left + (RunStart * FCharWidth));
     
     // Определяем цвета
     if RunSelected then
@@ -503,7 +537,7 @@ begin
 //            FCachedPaint.AntiAlias := True;
             FCachedPaint.Style := TSkPaintStyle.Fill;
             FCachedPaint.Color := FgColor;
-            Canvas.DrawSimpleText(CharToDraw, CharX, Y + FAscentOffset,
+            Canvas.DrawSimpleText(CharToDraw, CharX, SnapToPixel(Y + FAscentOffset),
               CurrentFont, FCachedPaint);
           end;
           if RunAttr.Underline or RunAttr.Strikethrough then
@@ -512,15 +546,15 @@ begin
             FCachedPaint.StrokeWidth := 1;
             FCachedPaint.Color := $FFFFFFFF;// FgColor;
             if RunAttr.Underline then
-              Canvas.DrawLine(CharX, Y + FAscentOffset + 2,
-                CharX + RenderWidth, Y + FAscentOffset + 2, FCachedPaint);
+              Canvas.DrawLine(CharX, SnapToPixel(Y + FAscentOffset + 2),
+                CharX + RenderWidth, SnapToPixel(Y + FAscentOffset + 2), FCachedPaint);
             if RunAttr.Strikethrough then
-              Canvas.DrawLine(CharX, Y + FCharHeight / 2,
-                CharX + RenderWidth, Y + FCharHeight / 2, FCachedPaint);
+              Canvas.DrawLine(CharX, SnapToPixel(Y + FCharHeight / 2),
+                CharX + RenderWidth, SnapToPixel(Y + FCharHeight / 2), FCachedPaint);
           end;
         end;
 
-        CharX := CharX + RenderWidth;
+        CharX := SnapToPixel(CharX + RenderWidth);
         Inc(CharIdx);
       end;
     end;
@@ -534,7 +568,8 @@ var
 begin
   X := (FBuffer.Cursor.X * FCharWidth);
   Y := (FBuffer.Cursor.Y * FCharHeight);
-  Result := TRectF.Create(X, Y, X + FCharWidth, Y + FCharHeight);
+  Result := TRectF.Create(SnapToPixel(X), SnapToPixel(Y),
+    SnapToPixel(X + FCharWidth), SnapToPixel(Y + FCharHeight));
 end;
 
 procedure TTerminalRenderer.RenderCursor(Canvas: ISkCanvas; const Bounds: TRectF);
@@ -547,6 +582,9 @@ begin
     Exit;
   CursorRect := GetCursorRect;
   CursorRect.Offset(Bounds.Left, Bounds.Top);
+  CursorRect := TRectF.Create(SnapToPixel(CursorRect.Left),
+    SnapToPixel(CursorRect.Top), SnapToPixel(CursorRect.Right),
+    SnapToPixel(CursorRect.Bottom));
   FCachedPaint.Style := TSkPaintStyle.Stroke;
   FCachedPaint.Color := $FFFFFFFF;
   FCachedPaint.StrokeWidth := 1;
@@ -589,13 +627,18 @@ begin
     ImageSnapshot := FBackBuffer.MakeImageSnapshot;
     if ImageSnapshot <> nil then
     begin
-      ScrollPx := ScrollDelta * FCharHeight;
+      // Сдвиг предыдущего кадра вверх в физических пикселях
+      ScrollPx := ScrollDelta * FCharHeight * FScaleX;
       BackCanvas.DrawImage(ImageSnapshot, 0, -ScrollPx);
     end;
   end
   else if (FBuffer.ViewportOffset = 0) and (ScrollDelta > 0) then
     BackCanvas.Clear(LDefaultBG);
-    
+
+  // Рисуем в логических координатах поверх физического буфера
+  BackCanvas.Save;
+  BackCanvas.Scale(FScaleX, FScaleX);
+
   for I := 0 to FBuffer.Height - 1 do
     if FBuffer.IsLineDirty(I) then
     begin
@@ -611,9 +654,14 @@ begin
       BackCanvas.DrawRect(TRectF.Create(0, TailY, Bounds.Width, Bounds.Height), FCachedPaint);
     end;
 
+  BackCanvas.Restore;
+
+  // Блиттинг: физический буфер → логический прямоугольник (1:1 на HiDPI)
   ImageSnapshot := FBackBuffer.MakeImageSnapshot;
   if ImageSnapshot <> nil then
-    Canvas.DrawImage(ImageSnapshot, Bounds.Left, Bounds.Top);
+    Canvas.DrawImageRect(ImageSnapshot,
+      TRectF.Create(Bounds.Left, Bounds.Top, Bounds.Right, Bounds.Bottom),
+      TSkSamplingOptions.Create(TSkFilterMode.Nearest, TSkMipmapMode.None));
   RenderCursor(Canvas, Bounds);
 end;
 

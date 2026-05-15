@@ -255,8 +255,30 @@ begin
 end;
 
 procedure TnbTerminalControl.Draw(const Canvas: ISkCanvas; const Dest: TRectF; const Opacity: Single);
+var
+  ScreenSvc: IFMXScreenService;
+  DPIScale, OldScale: Single;
+  NewCols, NewRows: Integer;
 begin
   inherited;
+  DPIScale := 1.0;
+  if TPlatformServices.Current.SupportsPlatformService(IFMXScreenService, ScreenSvc) then
+    DPIScale := ScreenSvc.GetScreenScale;
+
+  OldScale := FRenderer.Scale;
+  FRenderer.Scale := DPIScale;
+  if not SameValue(OldScale, DPIScale, 0.001) then
+  begin
+    if (FRenderer.CharWidth > 0) and (FRenderer.CharHeight > 0) then
+    begin
+      NewCols := Trunc(Width / FRenderer.CharWidth);
+      NewRows := Trunc(Height / FRenderer.CharHeight);
+      if (NewCols > 0) and (NewRows > 0) and
+        ((NewCols <> FBuffer.Width) or (NewRows <> FBuffer.Height)) then
+        FBuffer.Resize(NewCols, NewRows);
+    end;
+  end;
+
   FRenderer.Render(Canvas, Dest);
 end;
 
