@@ -20,6 +20,8 @@ type
     FAscentOffset: Single;
     FFontFamily: string;
     FFontSize: Single;
+    FFontBold: Boolean;
+    FFontItalic: Boolean;
     FShowCursor: Boolean;
     FCursorBlinkState: Boolean;
     FTheme: TTerminalTheme;
@@ -71,6 +73,8 @@ type
     property CharHeight: Single read FCharHeight;
     property FontFamily: string read FFontFamily write FFontFamily;
     property FontSize: Single read FFontSize write FFontSize;
+    property FontBold: Boolean read FFontBold write FFontBold;
+    property FontItalic: Boolean read FFontItalic write FFontItalic;
     property ShowCursor: Boolean read FShowCursor write FShowCursor;
     property Scale: Single read FScaleX write SetScale;
   end;
@@ -93,6 +97,8 @@ begin
   FFontFamily := 'Source Code Pro';
 {$ENDIF}
   FFontSize := 13;
+  FFontBold := False;
+  FFontItalic := False;
   FShowCursor := True;
   FCursorBlinkState := True;
   FAscentOffset := 0;
@@ -188,12 +194,17 @@ begin
 end;
 
 function TTerminalRenderer.GetFontForStyle(Bold, Italic: Boolean): ISkFont;
+var
+  UseBold, UseItalic: Boolean;
 begin
-  if Bold and Italic then
+  UseBold := Bold or FFontBold;
+  UseItalic := Italic or FFontItalic;
+
+  if UseBold and UseItalic then
     Result := FCachedFontBoldItalic
-  else if Bold then
+  else if UseBold then
     Result := FCachedFontBold
-  else if Italic then
+  else if UseItalic then
     Result := FCachedFontItalic
   else
     Result := FCachedFontNormal;

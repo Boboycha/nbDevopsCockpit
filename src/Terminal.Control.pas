@@ -59,6 +59,10 @@ type
     procedure SetFontSize(const Value: Single);
     function GetFontFamily: string;
     procedure SetFontFamily(const Value: string);
+    function GetFontBold: Boolean;
+    procedure SetFontBold(Value: Boolean);
+    function GetFontItalic: Boolean;
+    procedure SetFontItalic(Value: Boolean);
     function GetTheme: TTerminalTheme;
     procedure SetTheme(const Value: TTerminalTheme);
 
@@ -116,6 +120,8 @@ protected
   published
     property FontSize: Single read GetFontSize write SetFontSize;
     property FontFamily: string read GetFontFamily write SetFontFamily;
+    property FontBold: Boolean read GetFontBold write SetFontBold;
+    property FontItalic: Boolean read GetFontItalic write SetFontItalic;
     property Theme: TTerminalTheme read GetTheme write SetTheme;
     property SSHClient: TnbSSHClient read FSSHClient write SetSSHClient;
   end;
@@ -235,6 +241,44 @@ begin
   if FRenderer.FontFamily <> Value then
   begin
     FRenderer.FontFamily := Value;
+    FRenderer.MeasureChar;
+    FNeedRedraw := True;
+  end;
+end;
+
+function TnbTerminalControl.GetFontBold: Boolean;
+begin
+  if Assigned(FRenderer) then
+    Result := FRenderer.FontBold
+  else
+    Result := False;
+end;
+
+procedure TnbTerminalControl.SetFontBold(Value: Boolean);
+begin
+  if not Assigned(FRenderer) then Exit;
+  if FRenderer.FontBold <> Value then
+  begin
+    FRenderer.FontBold := Value;
+    FRenderer.MeasureChar;
+    FNeedRedraw := True;
+  end;
+end;
+
+function TnbTerminalControl.GetFontItalic: Boolean;
+begin
+  if Assigned(FRenderer) then
+    Result := FRenderer.FontItalic
+  else
+    Result := False;
+end;
+
+procedure TnbTerminalControl.SetFontItalic(Value: Boolean);
+begin
+  if not Assigned(FRenderer) then Exit;
+  if FRenderer.FontItalic <> Value then
+  begin
+    FRenderer.FontItalic := Value;
     FRenderer.MeasureChar;
     FNeedRedraw := True;
   end;
