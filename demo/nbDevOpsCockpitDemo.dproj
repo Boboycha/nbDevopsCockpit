@@ -324,8 +324,8 @@
         <BorlandProject>
             <Delphi.Personality>
                 <Excluded_Packages>
-                    <Excluded_Packages Name="$(BDSBIN)\dcloffice2k370.bpl">Microsoft Office 2000 Sample Automation Server Wrapper Components</Excluded_Packages>
-                    <Excluded_Packages Name="$(BDSBIN)\dclofficexp370.bpl">Microsoft Office XP Sample Automation Server Wrapper Components</Excluded_Packages>
+                    <Excluded_Packages Name="$(BDSBIN)\dcloffice2k290.bpl">Microsoft Office 2000 Sample Automation Server Wrapper Components</Excluded_Packages>
+                    <Excluded_Packages Name="$(BDSBIN)\dclofficexp290.bpl">Microsoft Office XP Sample Automation Server Wrapper Components</Excluded_Packages>
                 </Excluded_Packages>
                 <Source>
                     <Source Name="MainSource">nbDevOpsCockpitDemo.dpr</Source>
@@ -1473,10 +1473,7 @@
     <Import Project="$(BDS)\Bin\CodeGear.Delphi.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Delphi.Targets')"/>
     <Import Project="$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj" Condition="Exists('$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj')"/>
     <Import Project="$(MSBuildProjectName).deployproj" Condition="Exists('$(MSBuildProjectName).deployproj')"/>
-
     <Target Name="AfterBuild" Condition="'$(Platform)'=='Win64'">
-        <Copy SourceFiles="..\vendor\win64\libssh2.dll;..\vendor\win64\sk4d.dll"
-              DestinationFolder="..\bin\demo\$(Platform)\$(Config)"
-              SkipUnchangedFiles="true"/>
+        <Copy SourceFiles="..\vendor\win64\libssh2.dll;..\vendor\win64\sk4d.dll" DestinationFolder="..\bin\demo\$(Platform)\$(Config)" SkipUnchangedFiles="true"/>
     </Target>
 </Project>

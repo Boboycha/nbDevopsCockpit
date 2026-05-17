@@ -9,6 +9,9 @@
         <Projects Include="demo\nbDevOpsCockpitDemo.dproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="..\nbFleet\nbFleet.dproj">
+            <Dependencies/>
+        </Projects>
     </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Default.Personality.12</Borland.Personality>
@@ -35,14 +38,23 @@
     <Target Name="nbDevOpsCockpitDemo:Make">
         <MSBuild Projects="demo\nbDevOpsCockpitDemo.dproj" Targets="Make"/>
     </Target>
+    <Target Name="nbFleet">
+        <MSBuild Projects="..\nbFleet\nbFleet.dproj"/>
+    </Target>
+    <Target Name="nbFleet:Clean">
+        <MSBuild Projects="..\nbFleet\nbFleet.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="nbFleet:Make">
+        <MSBuild Projects="..\nbFleet\nbFleet.dproj" Targets="Make"/>
+    </Target>
     <Target Name="Build">
-        <CallTarget Targets="nbDevOpsCockpit;nbDevOpsCockpitDemo"/>
+        <CallTarget Targets="nbDevOpsCockpit;nbDevOpsCockpitDemo;nbFleet"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="nbDevOpsCockpit:Clean;nbDevOpsCockpitDemo:Clean"/>
+        <CallTarget Targets="nbDevOpsCockpit:Clean;nbDevOpsCockpitDemo:Clean;nbFleet:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="nbDevOpsCockpit:Make;nbDevOpsCockpitDemo:Make"/>
+        <CallTarget Targets="nbDevOpsCockpit:Make;nbDevOpsCockpitDemo:Make;nbFleet:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

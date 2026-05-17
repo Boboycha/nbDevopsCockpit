@@ -68,6 +68,7 @@ type
       AState: TMouseButtonState);
 
     function ApplyHighlighting(const Input: string): string;
+    procedure ResetViewportToBottom;
 
     // Буфер обмена
     procedure CopyToClipboard;
@@ -450,12 +451,23 @@ begin
   end;
 end;
 
+procedure TnbTerminalControl.ResetViewportToBottom;
+begin
+  if FBuffer.ViewportOffset <> 0 then
+  begin
+    FBuffer.ResetViewport;
+    FNeedRedraw := True;
+  end;
+end;
+
 procedure TnbTerminalControl.PasteFromClipboard;
 var
   ClipboardService: IFMXClipboardService;
   Value: TValue;
   Text: string;
 begin
+  ResetViewportToBottom;
+
   if FBuffer.HasSelection then
   begin
     FBuffer.ClearSelection;
@@ -505,8 +517,7 @@ begin
     Exit;
   end;
 
-  // Сбрасываем viewport при любом вводе
-  FBuffer.ResetViewport;
+  ResetViewportToBottom;
 
   S := TranslateKey(Key, KeyChar, Shift);
   if (S <> '') and Assigned(FOnData) then
@@ -580,8 +591,15 @@ var
   IsMouseReporting: Boolean;
   OverrideSelection: Boolean;
 begin
+  inherited;
   SetFocus;
   if (FRenderer.CharWidth = 0) or (FRenderer.CharHeight = 0) then Exit;
+
+  if (FBuffer.ViewportOffset <> 0) and not (ssShift in Shift) then
+  begin
+    ResetViewportToBottom;
+    Exit;
+  end;
 
   Col := Trunc(X / FRenderer.CharWidth);
   Row := Trunc(Y / FRenderer.CharHeight);
@@ -740,41 +758,15 @@ var
   LocalPos: TPointF;
   MouseService: IFMXMouseService;
   MousePos: TPointF;
-  I: Integer;
-  LinesToScroll: Integer;
 begin
-  LinesToScroll := 3;
-
   // Случай 1: Мышь НЕ отслеживается
   if not (mtm1002_Wheel in FBuffer.MouseModes) and
      not (mtm1006_SGR in FBuffer.MouseModes) then
   begin
-    if FBuffer.IsAlternateBuffer then
+    ResetViewportToBottom;
+    if FBuffer.HasSelection then
     begin
-      if Assigned(FOnData) then
-      begin
-        if FBuffer.HasSelection then
-        begin
-          FBuffer.ClearSelection;
-          FNeedRedraw := True;
-        end;
-
-        for I := 1 to LinesToScroll do
-        begin
-          if WheelDelta > 0 then
-            FOnData(#27'[A')
-          else
-            FOnData(#27'[B');
-        end;
-      end;
-    end
-    else
-    begin
-      if WheelDelta > 0 then
-         FBuffer.ScrollViewport(LinesToScroll)
-      else
-         FBuffer.ScrollViewport(-LinesToScroll);
-
+      FBuffer.ClearSelection;
       FNeedRedraw := True;
     end;
 

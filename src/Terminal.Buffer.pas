@@ -900,7 +900,6 @@ var
   I, J: Integer;
   NewLine: TTerminalLine;
   LinesDiff: Integer;
-  LineToMove: TTerminalLine;
 begin
   if (NewWidth <= 0) or (NewHeight <= 0) then Exit;
   if (NewWidth = FWidth) and (NewHeight = FHeight) then Exit;
@@ -935,32 +934,10 @@ begin
   end
   else if LinesDiff > 0 then
   begin
-    // === ОКНО УВЕЛИЧИВАЕТСЯ (РАСШИРЕНИЕ) ===
-    // Мы должны вернуть строки из истории НАВЕРХ экрана,
-    // чтобы заполнить пустоту сверху, а не снизу.
-
+    // При расширении не вытягиваем scrollback наверх: это сдвигает
+    // активную командную строку вниз при изменении размера панели.
     for I := 1 to LinesDiff do
-    begin
-      // Пытаемся достать строку из истории
-      if (not FUseAlternateBuffer) and (FScrollback.Count > 0) then
-      begin
-        // Берем последнюю строку из истории
-        LineToMove := FScrollback[FScrollback.Count - 1];
-        FScrollback.Delete(FScrollback.Count - 1);
-
-        // Вставляем её В НАЧАЛО экрана (индекс 0)
-        // Это сдвигает весь текущий текст ВНИЗ.
-        FLines.Insert(0, LineToMove);
-
-        // КУРСОР: Текст уехал вниз, курсор тоже должен поехать вниз.
-        Inc(FCursor.Y);
-      end
-      else
-      begin
-        // Если истории нет (или это Alt-буфер), добавляем пустую строку В КОНЕЦ
-        FLines.Add(CreateBlankLine);
-      end;
-    end;
+      FLines.Add(CreateBlankLine);
   end;
 
   // На всякий случай подгоняем размер под точный NewHeight (страховка)
