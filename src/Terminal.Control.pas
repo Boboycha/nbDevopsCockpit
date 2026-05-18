@@ -28,6 +28,7 @@ type
     FRenderer: TTerminalRenderer;
     FCursorTimer: TTimer;
     FOnData: TTerminalDataEvent;
+    FOnUserInput: TTerminalDataEvent;
     FTheme: TTerminalTheme;
 
     FRenderTimer: TTimer;
@@ -110,6 +111,10 @@ protected
     property Parser: TAnsiParser read FParser;
     property Renderer: TTerminalRenderer read FRenderer;
     property OnData: TTerminalDataEvent read FOnData write FOnData;
+    (* OnUserInput — только ввод пользователя (клавиатура и вставка из буфера),
+       без авто-ответов терминала и mouse-tracking. Предназначено для
+       зеркалирования ввода (broadcast) во внешних приложениях. *)
+    property OnUserInput: TTerminalDataEvent read FOnUserInput write FOnUserInput;
     property Cols: Integer read GetCols;
     property Rows: Integer read GetRows;
 
@@ -530,6 +535,8 @@ begin
         if FBuffer.BracketedPaste then
           Text := #27'[200~' + Text + #27'[201~';
         FOnData(Text);
+        if Assigned(FOnUserInput) then
+          FOnUserInput(Text);
       end;
     end;
   end;
@@ -567,6 +574,8 @@ begin
   if (S <> '') and Assigned(FOnData) then
   begin
     FOnData(S);
+    if Assigned(FOnUserInput) then
+      FOnUserInput(S);
     Key := 0;
     KeyChar := #0;
     FNeedRedraw := True;
