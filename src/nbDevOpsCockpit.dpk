@@ -45,6 +45,8 @@ contains
   Terminal.Renderer in 'Terminal.Renderer.pas',
   Terminal.Control in 'Terminal.Control.pas',
   nbSFTPClient in 'nbSFTPClient.pas',
+  nbSFTPTransfer in 'nbSFTPTransfer.pas',
+  nbFilePane in 'nbFilePane.pas',
   GoghThemeLoader in 'GoghThemeLoader.pas',
   Reg_nbDevOpsCockpit in 'Reg_nbDevOpsCockpit.pas';
 
