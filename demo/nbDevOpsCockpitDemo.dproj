@@ -107,7 +107,7 @@
         <AUP_READ_PHONE_STATE>true</AUP_READ_PHONE_STATE>
         <Icon_MainIcon>$(BDS)\bin\delphi_PROJECTICON.ico</Icon_MainIcon>
         <Icns_MainIcns>$(BDS)\bin\delphi_PROJECTICNS.icns</Icns_MainIcns>
-        <DCC_UnitSearchPath>Z:\Repos\nbDevopsCockpit\src;Z:\VCL\synapse;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_UnitSearchPath>..\src;Z:\VCL\synapse;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
         <SanitizedProjectName>nbDevOpsCockpitDemo</SanitizedProjectName>
         <DCC_Define>SKIA;$(DCC_Define)</DCC_Define>
     </PropertyGroup>

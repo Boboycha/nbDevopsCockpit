@@ -21,7 +21,7 @@ uses
   System.Classes, System.SysUtils, System.Types, System.UITypes,
   System.Generics.Collections, System.IOUtils,
   FMX.Types, FMX.Controls, FMX.Graphics, FMX.Layouts, FMX.StdCtrls,
-  FMX.Objects,
+  FMX.Objects, FMX.Edit, FMX.ListBox,
   nbSFTPClient;
 
 type
@@ -122,10 +122,9 @@ type
     procedure Delete(const APath: string; AIsDir: Boolean); override;
   end;
 
-  (* Компактная плоская glyph-кнопка тулбара (без зависимости от nbFleet). *)
-  TnbToolButton = class(TRectangle)
+  (* Компактная FMX-кнопка тулбара: вид приходит из активного StyleBook. *)
+  TnbToolButton = class(TSpeedButton)
   private
-    FGlyph: TText;
     procedure SetGlyphText(const AValue: string);
   public
     constructor Create(AOwner: TComponent); override;
@@ -139,13 +138,9 @@ type
     FPath: string;
     FEntries: TnbFileEntryArray;
     FToolBar: TLayout;
-    FPathBox: TRectangle;
-    FPathText: TText;
+    FPathEdit: TEdit;
     FListHost: TRectangle;
-    FList: TVertScrollBox;
-    FListContent: TLayout;
-    FScrollTrack: TRectangle;
-    FScrollThumb: TRectangle;
+    FList: TListBox;
     FSelectedIndex: Integer;
     FSelectionColor: TAlphaColor;
     FButtons: TList<TnbToolButton>;
@@ -158,10 +153,6 @@ type
     FDragArmed: Boolean;
     FDragging: Boolean;
     FDragStartScreen: TPointF;
-  FScrollDragging: Boolean;
-  FScrollDragStartY: Single;
-  FScrollDragStartViewportY: Single;
-
     class var FInstances: TList<TnbFilePane>;
     class var FDragSource: TnbFilePane;
     class var FDragTarget: TnbFilePane;
@@ -172,7 +163,6 @@ type
     function AddButton(const AGlyph: string; AOnClick: TNotifyEvent;
       const AHint: string): TnbToolButton;
     procedure BuildUi;
-    procedure PaintStyleTree(AObject: TFmxObject);
     procedure SetDropIndicatorVisible(AVisible: Boolean);
     procedure SelectIndex(AIndex: Integer);
     procedure EnsureSelectedVisible;
@@ -182,12 +172,6 @@ type
       const OldViewportPosition, NewViewportPosition: TPointF;
       const ContentSizeChanged: Boolean);
     procedure HandleListResize(Sender: TObject);
-    procedure HandleScrollMouseDown(Sender: TObject; Button: TMouseButton;
-      Shift: TShiftState; X, Y: Single);
-    procedure HandleScrollMouseMove(Sender: TObject; Shift: TShiftState;
-      X, Y: Single);
-    procedure HandleScrollMouseUp(Sender: TObject; Button: TMouseButton;
-      Shift: TShiftState; X, Y: Single);
     procedure HandleListing(Sender: TObject; const APath: string;
       const AEntries: TnbFileEntryArray);
     procedure HandleSourceError(Sender: TObject; const AMsg: string);
@@ -500,33 +484,20 @@ constructor TnbToolButton.Create(AOwner: TComponent);
 begin
   inherited;
   Align := TAlignLayout.Left;
-  Width := 28;
+  Width := 32;
   Margins.Rect := RectF(0, 2, 4, 2);
-  Fill.Kind := TBrushKind.None;
-  Stroke.Kind := TBrushKind.None;
-  XRadius := 3;
-  YRadius := 3;
-  HitTest := True;
-
-  FGlyph := TText.Create(Self);
-  FGlyph.Parent := Self;
-  FGlyph.Align := TAlignLayout.Client;
-  FGlyph.TextSettings.HorzAlign := TTextAlign.Center;
-  FGlyph.TextSettings.VertAlign := TTextAlign.Center;
-  FGlyph.TextSettings.Font.Size := 12;
-  FGlyph.HitTest := False;
+  StyleLookup := 'buttonstyle_secondary';
+  TextSettings.Trimming := TTextTrimming.None;
 end;
 
 procedure TnbToolButton.SetGlyphText(const AValue: string);
 begin
-  if FGlyph <> nil then
-    FGlyph.Text := AValue;
+  Text := AValue;
 end;
 
 procedure TnbToolButton.SetGlyphColor(AColor: TAlphaColor);
 begin
-  if FGlyph <> nil then
-    FGlyph.TextSettings.FontColor := AColor;
+  (* Text color is owned by the FMX style. Kept for API compatibility. *)
 end;
 
 { TnbFilePane }
@@ -587,10 +558,10 @@ end;
 
 class procedure TnbFilePane.SetDraggingCursor(AEnabled: Boolean);
 var
-  I, J, K: Integer;
+  I, J: Integer;
   Pane: TnbFilePane;
   C: TCursor;
-  Obj, Child: TFmxObject;
+  Item: TListBoxItem;
 begin
   if AEnabled then
     C := crDrag
@@ -606,22 +577,13 @@ begin
     if Pane.FListHost <> nil then
       Pane.FListHost.Cursor := C;
     if Pane.FList <> nil then
-      Pane.FList.Cursor := C;
-    if Pane.FListContent <> nil then
     begin
-      Pane.FListContent.Cursor := C;
-      for J := 0 to Pane.FListContent.ChildrenCount - 1 do
+      Pane.FList.Cursor := C;
+      for J := 0 to Pane.FList.Count - 1 do
       begin
-        Obj := Pane.FListContent.Children[J];
-        if Obj is TControl then
-          TControl(Obj).Cursor := C;
-        if Obj is TFmxObject then
-          for K := 0 to TFmxObject(Obj).ChildrenCount - 1 do
-          begin
-            Child := TFmxObject(Obj).Children[K];
-            if Child is TControl then
-              TControl(Child).Cursor := C;
-          end;
+        Item := Pane.FList.ListItems[J];
+        if Item <> nil then
+          Item.Cursor := C;
       end;
     end;
   end;
@@ -656,6 +618,7 @@ begin
   Result.Parent := FToolBar;
   Result.Glyph := AGlyph;
   Result.SetGlyphColor(FColText);
+  Result.ApplyStyleLookup;
   Result.OnClick := AOnClick;
   if AHint <> '' then
   begin
@@ -670,7 +633,7 @@ begin
   FToolBar := TLayout.Create(Self);
   FToolBar.Parent := Self;
   FToolBar.Align := TAlignLayout.Top;
-  FToolBar.Height := 26;
+  FToolBar.Height := 36;
   FToolBar.Margins.Rect := RectF(4, 2, 4, 0);
 
   AddButton(#$2191, HandleUp,      'Вверх');
@@ -679,23 +642,16 @@ begin
   AddButton('N',    HandleRename,  'Переименовать');
   AddButton('X',    HandleDelete,  'Удалить');
 
-  FPathBox := TRectangle.Create(Self);
-  FPathBox.Parent := Self;
-  FPathBox.Align := TAlignLayout.Top;
-  FPathBox.Position.Y := 100;
-  FPathBox.Height := 28;
-  FPathBox.Margins.Rect := RectF(4, 2, 4, 2);
-  FPathBox.XRadius := 3;
-  FPathBox.YRadius := 3;
-  FPathBox.Stroke.Kind := TBrushKind.Solid;
-
-  FPathText := TText.Create(FPathBox);
-  FPathText.Parent := FPathBox;
-  FPathText.Align := TAlignLayout.Client;
-  FPathText.Margins.Rect := RectF(6, 0, 6, 0);
-  FPathText.HitTest := False;
-  FPathText.TextSettings.HorzAlign := TTextAlign.Leading;
-  FPathText.TextSettings.VertAlign := TTextAlign.Center;
+  FPathEdit := TEdit.Create(Self);
+  FPathEdit.Parent := Self;
+  FPathEdit.Align := TAlignLayout.Top;
+  FPathEdit.Position.Y := 100;
+  FPathEdit.Height := 28;
+  FPathEdit.Margins.Rect := RectF(4, 2, 4, 2);
+  FPathEdit.StyleLookup := 'editstyle';
+  FPathEdit.ReadOnly := True;
+  FPathEdit.TextSettings.HorzAlign := TTextAlign.Leading;
+  FPathEdit.TextSettings.VertAlign := TTextAlign.Center;
 
   FListHost := TRectangle.Create(Self);
   FListHost.Parent := Self;
@@ -712,53 +668,20 @@ begin
   FListHost.OnDragOver := HandleDragOver;
   FListHost.OnDragDrop := HandleDragDrop;
 
-  FList := TVertScrollBox.Create(FListHost);
+  FList := TListBox.Create(FListHost);
   FList.Parent := FListHost;
   FList.Align := TAlignLayout.Client;
-  FList.Margins.Rect := RectF(1, 1, 9, 1);
-  FList.ShowScrollBars := False;
+  FList.Margins.Rect := RectF(1, 1, 1, 1);
+  FList.StyleLookup := 'listboxstyle';
+  FList.ShowScrollBars := True;
   FList.ClipChildren := True;
   FList.HitTest := True;
+  FList.ItemHeight := 22;
+  FList.DefaultItemStyles.ItemStyle := 'listboxitemstyle';
   FList.OnDragOver := HandleDragOver;
   FList.OnDragDrop := HandleDragDrop;
   FList.OnViewportPositionChange := HandleListViewportChanged;
   FList.OnResize := HandleListResize;
-
-  FListContent := TLayout.Create(FList);
-  FListContent.Parent := FList;
-  FListContent.Align := TAlignLayout.Top;
-  FListContent.Height := 0;
-  FListContent.HitTest := True;
-  FListContent.OnDragOver := HandleDragOver;
-  FListContent.OnDragDrop := HandleDragDrop;
-
-  FScrollTrack := TRectangle.Create(FListHost);
-  FScrollTrack.Parent := FListHost;
-  FScrollTrack.Align := TAlignLayout.Right;
-  FScrollTrack.Width := 7;
-  FScrollTrack.Margins.Rect := RectF(0, 7, 2, 7);
-  FScrollTrack.XRadius := 3;
-  FScrollTrack.YRadius := 3;
-  FScrollTrack.Stroke.Kind := TBrushKind.None;
-  FScrollTrack.HitTest := True;
-  FScrollTrack.OnMouseDown := HandleScrollMouseDown;
-  FScrollTrack.OnMouseMove := HandleScrollMouseMove;
-  FScrollTrack.OnMouseUp := HandleScrollMouseUp;
-  FScrollTrack.BringToFront;
-
-  FScrollThumb := TRectangle.Create(FScrollTrack);
-  FScrollThumb.Parent := FScrollTrack;
-  FScrollThumb.Align := TAlignLayout.None;
-  FScrollThumb.Position.X := 1;
-  FScrollThumb.Width := 5;
-  FScrollThumb.Height := 24;
-  FScrollThumb.XRadius := 3;
-  FScrollThumb.YRadius := 3;
-  FScrollThumb.Stroke.Kind := TBrushKind.None;
-  FScrollThumb.HitTest := True;
-  FScrollThumb.OnMouseDown := HandleScrollMouseDown;
-  FScrollThumb.OnMouseMove := HandleScrollMouseMove;
-  FScrollThumb.OnMouseUp := HandleScrollMouseUp;
 
 end;
 
@@ -779,33 +702,6 @@ begin
     end;
     FListHost.Repaint;
   end;
-end;
-
-procedure TnbFilePane.PaintStyleTree(AObject: TFmxObject);
-var
-  I: Integer;
-begin
-  if AObject = nil then Exit;
-  if AObject is TnbToolButton then Exit;  (* glyph-кнопки красятся отдельно *)
-
-  if AObject is TShape then
-  begin
-    TShape(AObject).Fill.Kind := TBrushKind.Solid;
-    TShape(AObject).Fill.Color := FColSurface;
-    TShape(AObject).Stroke.Kind := TBrushKind.Solid;
-    TShape(AObject).Stroke.Color := FColBorder;
-  end
-  else if AObject is TText then
-    TText(AObject).TextSettings.FontColor := FColText
-  else if AObject is TTextControl then
-  begin
-    TTextControl(AObject).StyledSettings :=
-      TTextControl(AObject).StyledSettings - [TStyledSetting.FontColor];
-    TTextControl(AObject).TextSettings.FontColor := FColText;
-  end;
-
-  for I := 0 to AObject.ChildrenCount - 1 do
-    PaintStyleTree(AObject.Children[I]);
 end;
 
 procedure TnbFilePane.SetSource(const ASource: InbFileSource);
@@ -835,7 +731,7 @@ procedure TnbFilePane.HandleListing(Sender: TObject; const APath: string;
   const AEntries: TnbFileEntryArray);
 begin
   FPath := APath;
-  FPathText.Text := APath;
+  FPathEdit.Text := APath;
   FEntries := AEntries;
   FSelectedIndex := -1;
   FillList;
@@ -853,36 +749,8 @@ begin
 end;
 
 procedure TnbFilePane.UpdateScrollThumb;
-var
-  ViewHeight, ContentHeight, TrackHeight: Single;
-  ThumbHeight, MaxThumbTop, MaxScrollY: Single;
 begin
-  if (FList = nil) or (FListContent = nil)
-    or (FScrollTrack = nil) or (FScrollThumb = nil) then Exit;
-
-  ViewHeight := FList.Height;
-  ContentHeight := FListContent.Height;
-  TrackHeight := FScrollTrack.Height;
-  if (ViewHeight <= 0) or (ContentHeight <= ViewHeight) or (TrackHeight <= 0) then
-  begin
-    FScrollTrack.Visible := False;
-    Exit;
-  end;
-
-  FScrollTrack.Visible := True;
-  ThumbHeight := TrackHeight * ViewHeight / ContentHeight;
-  if ThumbHeight < 24 then
-    ThumbHeight := 24;
-  if ThumbHeight > TrackHeight then
-    ThumbHeight := TrackHeight;
-
-  MaxThumbTop := TrackHeight - ThumbHeight;
-  MaxScrollY := ContentHeight - ViewHeight;
-  FScrollThumb.Height := ThumbHeight;
-  if MaxScrollY > 0 then
-    FScrollThumb.Position.Y := MaxThumbTop * FList.ViewportPosition.Y / MaxScrollY
-  else
-    FScrollThumb.Position.Y := 0;
+  (* Native TVertScrollBox scrollbars are styled by FMX. *)
 end;
 
 procedure TnbFilePane.HandleListViewportChanged(Sender: TObject;
@@ -912,25 +780,10 @@ begin
 end;
 
 procedure TnbFilePane.EnsureSelectedVisible;
-var
-  RowTop, RowBottom, ViewTop, ViewBottom, MaxScrollY: Single;
 begin
-  if (FSelectedIndex < 0) or (FList = nil) or (FListContent = nil) then Exit;
-
-  RowTop := FSelectedIndex * 22;
-  RowBottom := RowTop + 22;
-  ViewTop := FList.ViewportPosition.Y;
-  ViewBottom := ViewTop + FList.Height;
-  MaxScrollY := Max(0, FListContent.Height - FList.Height);
-
-  if RowTop < ViewTop then
-    FList.ViewportPosition := PointF(FList.ViewportPosition.X,
-      EnsureRange(RowTop, 0, MaxScrollY))
-  else if RowBottom > ViewBottom then
-    FList.ViewportPosition := PointF(FList.ViewportPosition.X,
-      EnsureRange(RowBottom - FList.Height, 0, MaxScrollY));
-
-  UpdateScrollThumb;
+  if (FSelectedIndex < 0) or (FList = nil)
+    or (FSelectedIndex >= FList.Count) then Exit;
+  FList.ScrollToItem(FList.ListItems[FSelectedIndex]);
 end;
 
 procedure TnbFilePane.KeyDown(var Key: Word; var KeyChar: WideChar;
@@ -970,79 +823,15 @@ begin
   end;
 end;
 
-procedure TnbFilePane.HandleScrollMouseDown(Sender: TObject;
-  Button: TMouseButton; Shift: TShiftState; X, Y: Single);
-var
-  TrackY, MaxThumbTop, MaxScrollY: Single;
-  ScreenPt, TrackPt: TPointF;
-begin
-  if CanFocus then
-    SetFocus;
-  if Button <> TMouseButton.mbLeft then Exit;
-  if (FList = nil) or (FListContent = nil)
-    or (FScrollTrack = nil) or (FScrollThumb = nil) then Exit;
-  if FListContent.Height <= FList.Height then Exit;
-
-  ScreenPt := TControl(Sender).LocalToScreen(PointF(X, Y));
-  TrackPt := FScrollTrack.ScreenToLocal(ScreenPt);
-  if Sender = FScrollTrack then
-  begin
-    TrackY := TrackPt.Y - FScrollThumb.Height / 2;
-    MaxThumbTop := FScrollTrack.Height - FScrollThumb.Height;
-    MaxScrollY := FListContent.Height - FList.Height;
-    if (MaxThumbTop > 0) and (MaxScrollY > 0) then
-      FList.ViewportPosition := PointF(FList.ViewportPosition.X,
-        EnsureRange(TrackY / MaxThumbTop * MaxScrollY, 0, MaxScrollY));
-  end;
-
-  FScrollDragging := True;
-  FScrollDragStartY := ScreenPt.Y;
-  FScrollDragStartViewportY := FList.ViewportPosition.Y;
-  TControlAccess(TControl(Sender)).Capture;
-  UpdateScrollThumb;
-end;
-
-procedure TnbFilePane.HandleScrollMouseMove(Sender: TObject; Shift: TShiftState;
-  X, Y: Single);
-var
-  ScreenPt: TPointF;
-  DeltaY, MaxThumbTop, MaxScrollY: Single;
-begin
-  if not FScrollDragging then Exit;
-  if not (ssLeft in Shift) then Exit;
-  if (FList = nil) or (FListContent = nil)
-    or (FScrollTrack = nil) or (FScrollThumb = nil) then Exit;
-
-  MaxThumbTop := FScrollTrack.Height - FScrollThumb.Height;
-  MaxScrollY := FListContent.Height - FList.Height;
-  if (MaxThumbTop <= 0) or (MaxScrollY <= 0) then Exit;
-
-  ScreenPt := TControl(Sender).LocalToScreen(PointF(X, Y));
-  DeltaY := ScreenPt.Y - FScrollDragStartY;
-  FList.ViewportPosition := PointF(FList.ViewportPosition.X,
-    EnsureRange(FScrollDragStartViewportY + DeltaY / MaxThumbTop * MaxScrollY,
-      0, MaxScrollY));
-  UpdateScrollThumb;
-end;
-
-procedure TnbFilePane.HandleScrollMouseUp(Sender: TObject;
-  Button: TMouseButton; Shift: TShiftState; X, Y: Single);
-begin
-  if Button = TMouseButton.mbLeft then
-    FScrollDragging := False;
-end;
-
 procedure TnbFilePane.FillList;
 var
   I: Integer;
-  Row: TRectangle;
-  Text: TText;
+  Item: TListBoxItem;
   Caption: string;
 begin
   FList.BeginUpdate;
   try
-    FListContent.DeleteChildren;
-    FListContent.Height := 0;
+    FList.Clear;
     for I := 0 to High(FEntries) do
     begin
       if FEntries[I].IsDir then
@@ -1050,44 +839,26 @@ begin
       else
         Caption := FEntries[I].Name + '   ' + FormatSize(FEntries[I].Size);
 
-      Row := TRectangle.Create(FListContent);
-      Row.Parent := FListContent;
-      Row.Align := TAlignLayout.Top;
-      Row.Height := 22;
-      Row.Tag := I;
-      Row.HitTest := True;
-      Row.Stroke.Kind := TBrushKind.None;
-      Row.Fill.Kind := TBrushKind.Solid;
-      Row.Fill.Color := FColBg;
-      Row.OnMouseDown := HandleRowMouseDown;
-      Row.OnMouseMove := HandleRowMouseMove;
-      Row.OnMouseUp := HandleRowMouseUp;
-      Row.OnDblClick := HandleRowDblClick;
-      Row.OnDragEnd := HandleDragEnd;
-      Row.OnDragOver := HandleDragOver;
-      Row.OnDragDrop := HandleDragDrop;
-      Row.DragMode := TDragMode.dmManual;
-
-      Text := TText.Create(Row);
-      Text.Parent := Row;
-      Text.Align := TAlignLayout.Client;
-      Text.Margins.Rect := RectF(6, 0, 6, 0);
-      Text.HitTest := True;
-      Text.Tag := I;
-      Text.Text := Caption;
-      Text.TextSettings.HorzAlign := TTextAlign.Leading;
-      Text.TextSettings.VertAlign := TTextAlign.Center;
-      Text.TextSettings.FontColor := FColText;
-      Text.OnMouseDown := HandleRowMouseDown;
-      Text.OnMouseMove := HandleRowMouseMove;
-      Text.OnMouseUp := HandleRowMouseUp;
-      Text.OnDblClick := HandleRowDblClick;
-      Text.OnDragEnd := HandleDragEnd;
-      Text.OnDragOver := HandleDragOver;
-      Text.OnDragDrop := HandleDragDrop;
-      Text.DragMode := TDragMode.dmManual;
-
-      FListContent.Height := FListContent.Height + Row.Height;
+      Item := TListBoxItem.Create(FList);
+      Item.Parent := FList;
+      Item.Height := 22;
+      Item.Tag := I;
+      Item.Text := Caption;
+      Item.StyleLookup := 'listboxitemstyle';
+      Item.StyledSettings := Item.StyledSettings - [TStyledSetting.FontColor];
+      Item.TextSettings.FontColor := FColText;
+      Item.TextSettings.HorzAlign := TTextAlign.Leading;
+      Item.TextSettings.VertAlign := TTextAlign.Center;
+      Item.HitTest := True;
+      Item.Selectable := True;
+      Item.OnMouseDown := HandleRowMouseDown;
+      Item.OnMouseMove := HandleRowMouseMove;
+      Item.OnMouseUp := HandleRowMouseUp;
+      Item.OnDblClick := HandleRowDblClick;
+      Item.OnDragEnd := HandleDragEnd;
+      Item.OnDragOver := HandleDragOver;
+      Item.OnDragDrop := HandleDragDrop;
+      Item.DragMode := TDragMode.dmManual;
     end;
   finally
     FList.EndUpdate;
@@ -1266,6 +1037,8 @@ begin
   begin
     Obj := TFmxObject(AObject);
     FSelectedIndex := Obj.Tag;
+    if (FList <> nil) and (FSelectedIndex >= 0) and (FSelectedIndex < FList.Count) then
+      FList.ItemIndex := FSelectedIndex;
   end;
   UpdateRowSelection;
 end;
@@ -1273,19 +1046,17 @@ end;
 procedure TnbFilePane.UpdateRowSelection;
 var
   I: Integer;
-  Row: TRectangle;
+  Item: TListBoxItem;
 begin
-  if FListContent = nil then Exit;
-  for I := 0 to FListContent.ChildrenCount - 1 do
-    if FListContent.Children[I] is TRectangle then
-    begin
-      Row := TRectangle(FListContent.Children[I]);
-      if Row.Tag = FSelectedIndex then
-        Row.Fill.Color := FSelectionColor
-      else
-        Row.Fill.Color := FColBg;
-      Row.Repaint;
-    end;
+  if FList = nil then Exit;
+  FList.ItemIndex := FSelectedIndex;
+  for I := 0 to FList.Count - 1 do
+  begin
+    Item := FList.ListItems[I];
+    Item.StyledSettings := Item.StyledSettings - [TStyledSetting.FontColor];
+    Item.TextSettings.FontColor := FColText;
+    Item.IsSelected := Item.Tag = FSelectedIndex;
+  end;
 end;
 
 procedure TnbFilePane.HandleUp(Sender: TObject);
@@ -1378,14 +1149,12 @@ begin
     or (Round((ASurface and $FF) * 0.70 + (AText and $FF) * 0.30) and $FF);
   for I := 0 to FButtons.Count - 1 do
     FButtons[I].SetGlyphColor(AText);
-  if FPathBox <> nil then
+  if FPathEdit <> nil then
   begin
-    FPathBox.Fill.Kind := TBrushKind.Solid;
-    FPathBox.Fill.Color := ABg;
-    FPathBox.Stroke.Color := ABorder;
+    FPathEdit.StyledSettings := FPathEdit.StyledSettings - [TStyledSetting.FontColor];
+    FPathEdit.TextSettings.FontColor := AText;
+    FPathEdit.ApplyStyleLookup;
   end;
-  if FPathText <> nil then
-    FPathText.TextSettings.FontColor := AText;
   if FListHost <> nil then
   begin
     FListHost.Fill.Kind := TBrushKind.None;
@@ -1393,18 +1162,7 @@ begin
     FListHost.Stroke.Color := ABorder;
     FListHost.Stroke.Thickness := 1;
   end;
-  if FScrollTrack <> nil then
-  begin
-    FScrollTrack.Fill.Kind := TBrushKind.Solid;
-    FScrollTrack.Fill.Color := ABg;
-  end;
-  if FScrollThumb <> nil then
-  begin
-    FScrollThumb.Fill.Kind := TBrushKind.Solid;
-    FScrollThumb.Fill.Color := ABorder;
-  end;
   UpdateRowSelection;
-  UpdateScrollThumb;
 end;
 
 end.

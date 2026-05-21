@@ -61,6 +61,7 @@ type
     procedure EnqueueCommand(const ACmd: TSFTPCommand);
     function PopCommand(out ACmd: TSFTPCommand): Boolean;
     function GetSessionError: string;
+    function GetSFTPError: string;
     function WaitResult(const AFunc: TFunc<Integer>): Integer;
     function WaitPointer(const AFunc: TFunc<Pointer>): Pointer;
     function ConnectSession: Boolean;
@@ -147,6 +148,7 @@ uses
 
 const
   LIBSSH2_ERROR_EAGAIN = -37;
+  LIBSSH2_ERROR_SFTP_PROTOCOL = -31;
   LIBSSH2_DISCONNECT_BY_APPLICATION = 11;
   LIBSSH2_FXF_READ = $00000001;
   LIBSSH2_FXF_WRITE = $00000002;
@@ -160,6 +162,7 @@ const
   LIBSSH2_SFTP_ATTR_SIZE = $00000001;
   LIBSSH2_SFTP_ATTR_PERMISSIONS = $00000004;
   LIBSSH2_SFTP_ATTR_ACMODTIME = $00000008;
+  LIBSSH2_FX_EOF = 1;
   S_IFMT = $F000;
   S_IFDIR = $4000;
 
@@ -456,6 +459,19 @@ begin
     Result := 'libssh2 error';
 end;
 
+function TSFTPWorkerThread.GetSFTPError: string;
+var
+  Code: Cardinal;
+begin
+  Result := GetSessionError;
+  if (FSFTP <> nil) and Assigned(ssh2_sftp_last_error) then
+  begin
+    Code := ssh2_sftp_last_error(FSFTP);
+    if Code <> 0 then
+      Result := Format('%s (SFTP status %d)', [Result, Code]);
+  end;
+end;
+
 function TSFTPWorkerThread.WaitResult(const AFunc: TFunc<Integer>): Integer;
 begin
   repeat
@@ -651,7 +667,13 @@ begin
         end);
       if ReadLen = 0 then Break;
       if ReadLen < 0 then
-        raise Exception.Create('Read dir failed: ' + GetSessionError);
+      begin
+        if (ReadLen = LIBSSH2_ERROR_SFTP_PROTOCOL)
+          and Assigned(ssh2_sftp_last_error)
+          and (ssh2_sftp_last_error(FSFTP) = LIBSSH2_FX_EOF) then
+          Break;
+        raise Exception.Create('Read dir failed: ' + GetSFTPError);
+      end;
       SetString(NameA, PAnsiChar(@Buf[0]), ReadLen);
       if (NameA = '.') or (NameA = '..') then Continue;
       Entry := Default(TSFTPEntry);
