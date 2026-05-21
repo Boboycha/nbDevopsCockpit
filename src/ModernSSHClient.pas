@@ -89,6 +89,7 @@ type
     FPubKeyData: AnsiString;
     FInitialCols: Integer;
     FInitialRows: Integer;
+    FConnectionTimeoutMs: Integer;
     FWorker: TSSHWorkerThread;
     FOnStatusChange: TSSHStatusEvent;
     FOnReadData: TSSHReadEvent;
@@ -133,6 +134,8 @@ type
     property Passphrase: string read FPassphrase write FPassphrase;
     property InitialCols: Integer read FInitialCols write FInitialCols;
     property InitialRows: Integer read FInitialRows write FInitialRows;
+    property ConnectionTimeoutMs: Integer read FConnectionTimeoutMs
+      write FConnectionTimeoutMs default 10000;
 
     (* Если True, после успешного коннекта в канал отправляется #21 (Ctrl+U)
        чтобы "разбудить" bash на серверах где первый prompt не показывается
@@ -990,6 +993,8 @@ begin
   SetLength(Buf, 32768);
 
   try
+    if FOwner.ConnectionTimeoutMs > 0 then
+      FSocket.ConnectionTimeout := FOwner.ConnectionTimeoutMs;
     FSocket.Connect(FOwner.Host, FOwner.Port);
     if FSocket.LastError <> 0 then
     begin
@@ -1194,6 +1199,7 @@ begin
   FPort := '22';
   FInitialCols := 80;
   FInitialRows := 24;
+  FConnectionTimeoutMs := 10000;
   FWakeOnConnect := True;
 end;
 
