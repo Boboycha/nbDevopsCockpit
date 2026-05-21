@@ -228,10 +228,43 @@ type
 implementation
 
 uses
-  System.Math, FMX.Dialogs, FMX.Forms;
+  System.Math, System.StrUtils, FMX.Dialogs, FMX.Forms;
+
+const
+  FILE_ICON_FONT       = 'Segoe MDL2 Assets';
+  FILE_ICON_UP         = #$E74A;
+  FILE_ICON_REFRESH    = #$E72C;
+  FILE_ICON_NEW_FOLDER = #$E8F4;
+  FILE_ICON_RENAME     = #$E8AC;
+  FILE_ICON_DELETE     = #$E74D;
+  FILE_ICON_UPLOAD     = #$E898;
+  FILE_ICON_DOWNLOAD   = #$E896;
+  FILE_ICON_TRANSFER   = #$E8AB;
 
 type
   TControlAccess = class(TControl);
+
+function FileToolIconFor(const AGlyph, AHint: string): string;
+begin
+  if ContainsText(AHint, 'вверх') or (AGlyph = #$2191) then
+    Exit(FILE_ICON_UP);
+  if ContainsText(AHint, 'обнов') or SameText(AGlyph, 'R') then
+    Exit(FILE_ICON_REFRESH);
+  if ContainsText(AHint, 'новая папка') or (AGlyph = '+') then
+    Exit(FILE_ICON_NEW_FOLDER);
+  if ContainsText(AHint, 'переимен') or SameText(AGlyph, 'N') then
+    Exit(FILE_ICON_RENAME);
+  if ContainsText(AHint, 'удал') or SameText(AGlyph, 'X') then
+    Exit(FILE_ICON_DELETE);
+  if ContainsText(AHint, 'загруз') then
+    Exit(FILE_ICON_UPLOAD);
+  if ContainsText(AHint, 'скач') then
+    Exit(FILE_ICON_DOWNLOAD);
+  if (AGlyph = #$2192) or (AGlyph = #$2190) then
+    Exit(FILE_ICON_TRANSFER);
+
+  Result := AGlyph;
+end;
 
 function FormatSize(ASize: Int64): string;
 begin
@@ -484,9 +517,15 @@ constructor TnbToolButton.Create(AOwner: TComponent);
 begin
   inherited;
   Align := TAlignLayout.Left;
-  Width := 32;
+  Width := 30;
   Margins.Rect := RectF(0, 2, 4, 2);
-  StyleLookup := 'buttonstyle_secondary';
+  StyledSettings := StyledSettings - [TStyledSetting.Family,
+    TStyledSetting.Size, TStyledSetting.FontColor];
+  TextSettings.Font.Family := FILE_ICON_FONT;
+  TextSettings.Font.Size := 16;
+  TextSettings.FontColor := TAlphaColor($FFCCD4DE);
+  TextSettings.HorzAlign := TTextAlign.Center;
+  TextSettings.VertAlign := TTextAlign.Center;
   TextSettings.Trimming := TTextTrimming.None;
 end;
 
@@ -497,7 +536,8 @@ end;
 
 procedure TnbToolButton.SetGlyphColor(AColor: TAlphaColor);
 begin
-  (* Text color is owned by the FMX style. Kept for API compatibility. *)
+  StyledSettings := StyledSettings - [TStyledSetting.FontColor];
+  TextSettings.FontColor := AColor;
 end;
 
 { TnbFilePane }
@@ -616,9 +656,8 @@ function TnbFilePane.AddButton(const AGlyph: string; AOnClick: TNotifyEvent;
 begin
   Result := TnbToolButton.Create(Self);
   Result.Parent := FToolBar;
-  Result.Glyph := AGlyph;
+  Result.Glyph := FileToolIconFor(AGlyph, AHint);
   Result.SetGlyphColor(FColText);
-  Result.ApplyStyleLookup;
   Result.OnClick := AOnClick;
   if AHint <> '' then
   begin
@@ -1123,7 +1162,7 @@ begin
     FTransferButton := AddButton(AGlyph, HandleTransfer, AHint)
   else
   begin
-    FTransferButton.Glyph := AGlyph;
+    FTransferButton.Glyph := FileToolIconFor(AGlyph, AHint);
     FTransferButton.Hint := AHint;
     FTransferButton.Visible := True;
   end;
