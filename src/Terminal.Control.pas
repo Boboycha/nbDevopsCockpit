@@ -12,6 +12,7 @@ uses
 
 type
   TTerminalDataEvent = procedure(const S: string) of object;
+  TTerminalHostOutputEvent = procedure(var S: string) of object;
 
   TMouseButtonState = (mbsDown, mbsUp, mbsMove);
 
@@ -29,6 +30,7 @@ type
     FCursorTimer: TTimer;
     FOnData: TTerminalDataEvent;
     FOnUserInput: TTerminalDataEvent;
+    FOnHostOutput: TTerminalHostOutputEvent;
     FTheme: TTerminalTheme;
 
     FRenderTimer: TTimer;
@@ -115,6 +117,8 @@ protected
        без авто-ответов терминала и mouse-tracking. Предназначено для
        зеркалирования ввода (broadcast) во внешних приложениях. *)
     property OnUserInput: TTerminalDataEvent read FOnUserInput write FOnUserInput;
+    property OnHostOutput: TTerminalHostOutputEvent
+      read FOnHostOutput write FOnHostOutput;
     property Cols: Integer read GetCols;
     property Rows: Integer read GetRows;
 
@@ -919,8 +923,14 @@ begin
 end;
 
 procedure TnbTerminalControl.HandleSSHReadData(Sender: TObject; const Data: string);
+var
+  Filtered: string;
 begin
-  WriteText(Data);
+  Filtered := Data;
+  if Assigned(FOnHostOutput) then
+    FOnHostOutput(Filtered);
+  if Filtered <> '' then
+    WriteText(Filtered);
 end;
 
 procedure TnbTerminalControl.HandleOwnDataOutput(const S: string);
