@@ -19,7 +19,7 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Types, System.UITypes,
-  System.Generics.Collections, System.IOUtils,
+  System.Generics.Collections, System.Generics.Defaults, System.IOUtils,
   FMX.Types, FMX.Controls, FMX.Graphics, FMX.Layouts, FMX.StdCtrls,
   FMX.Objects, FMX.Edit, FMX.ListBox,
   nbSFTPClient;
@@ -33,6 +33,7 @@ type
     IsDir: Boolean;
     Size: Int64;
     Modified: TDateTime;
+    Permissions: Cardinal;
   end;
   TnbFileEntryArray = array of TnbFileEntry;
 
@@ -140,8 +141,11 @@ type
     FToolBar: TLayout;
     FPathEdit: TEdit;
     FListHost: TRectangle;
+    FHeader: TLayout;
     FList: TListBox;
     FSelectedIndex: Integer;
+    FSortColumn: Integer;
+    FSortDescending: Boolean;
     FSelectionColor: TAlphaColor;
     FButtons: TList<TnbToolButton>;
     FTransferButton: TnbToolButton;
@@ -168,6 +172,9 @@ type
     procedure EnsureSelectedVisible;
     procedure UpdateScrollThumb;
     procedure FillList;
+    procedure SortEntries;
+    procedure UpdateHeaderCaptions;
+    procedure HandleHeaderClick(Sender: TObject);
     procedure HandleListViewportChanged(Sender: TObject;
       const OldViewportPosition, NewViewportPosition: TPointF;
       const ContentSizeChanged: Boolean);
@@ -240,6 +247,22 @@ const
   FILE_ICON_UPLOAD     = #$E898;
   FILE_ICON_DOWNLOAD   = #$E896;
   FILE_ICON_TRANSFER   = #$E8AB;
+  FILE_ICON_FOLDER     = #$E8B7;
+  FILE_ICON_DOCUMENT   = #$E8A5;
+
+  FILE_ROW_HEIGHT      = 44;
+  FILE_HEADER_HEIGHT   = 36;
+  FILE_COL_DATE_WIDTH  = 150;
+  FILE_COL_SIZE_WIDTH  = 78;
+  FILE_COL_KIND_WIDTH  = 92;
+  FILE_MUTED_TEXT      = TAlphaColor($FF8B98AA);
+  FILE_ICON_BLUE       = TAlphaColor($FF6EC8F2);
+  FILE_ROW_LINE        = TAlphaColor($222F3A4A);
+
+  FILE_SORT_NAME       = 0;
+  FILE_SORT_DATE       = 1;
+  FILE_SORT_SIZE       = 2;
+  FILE_SORT_KIND       = 3;
 
 type
   TControlAccess = class(TControl);
@@ -274,6 +297,72 @@ begin
     Result := Format('%.1f КБ', [ASize / 1024])
   else
     Result := Format('%.1f МБ', [ASize / 1024 / 1024]);
+end;
+
+function FormatModified(ADate: TDateTime): string;
+begin
+  if ADate <= 0 then
+    Exit('');
+  Result := FormatDateTime('m/d/yyyy, h:nn AM/PM', ADate);
+end;
+
+function FormatPermissions(APermissions: Cardinal; AIsDir: Boolean): string;
+
+  function PermissionChar(AMask: Cardinal; AChar: Char): Char;
+  begin
+    if (APermissions and AMask) <> 0 then
+      Result := AChar
+    else
+      Result := '-';
+  end;
+
+begin
+  if APermissions = 0 then
+  begin
+    if AIsDir then
+      Exit('folder');
+    Exit('file');
+  end;
+
+  if AIsDir then
+    Result := 'd'
+  else
+    Result := '-';
+  Result := Result
+    + PermissionChar($100, 'r') + PermissionChar($080, 'w') + PermissionChar($040, 'x')
+    + PermissionChar($020, 'r') + PermissionChar($010, 'w') + PermissionChar($008, 'x')
+    + PermissionChar($004, 'r') + PermissionChar($002, 'w') + PermissionChar($001, 'x');
+end;
+
+function EntryKind(const AEntry: TnbFileEntry): string;
+begin
+  if AEntry.IsDir then
+    Result := 'folder'
+  else
+    Result := 'file';
+end;
+
+function HeaderBaseCaption(AColumn: Integer): string;
+begin
+  case AColumn of
+    FILE_SORT_DATE: Result := 'Date Modified';
+    FILE_SORT_SIZE: Result := 'Size';
+    FILE_SORT_KIND: Result := 'Kind';
+  else
+    Result := 'Name';
+  end;
+end;
+
+function HeaderCaption(const AText: string; AColumn, ASortColumn: Integer;
+  ASortDescending: Boolean): string;
+begin
+  Result := AText;
+  if AColumn <> ASortColumn then
+    Exit;
+  if ASortDescending then
+    Result := Result + ' v'
+  else
+    Result := Result + ' ^';
 end;
 
 { TnbFileSourceBase }
@@ -335,6 +424,22 @@ var
   Entries: TnbFileEntryArray;
   I, N: Integer;
 begin
+  if Trim(APath) = '' then
+  begin
+    Dirs := TDirectory.GetLogicalDrives;
+    SetLength(Entries, Length(Dirs));
+    for I := 0 to High(Dirs) do
+    begin
+      Entries[I].Name := IncludeTrailingPathDelimiter(Dirs[I]);
+      Entries[I].IsDir := True;
+      Entries[I].Size := 0;
+      Entries[I].Modified := 0;
+      Entries[I].Permissions := 0;
+    end;
+    DoListing('', Entries);
+    Exit;
+  end;
+
   try
     Dirs := TDirectory.GetDirectories(APath);
     Files := TDirectory.GetFiles(APath);
@@ -356,6 +461,7 @@ begin
     Entries[N].IsDir := True;
     Entries[N].Size := 0;
     Entries[N].Modified := 0;
+    Entries[N].Permissions := 0;
     Inc(N);
   end;
   for I := 0 to High(Files) do
@@ -368,6 +474,7 @@ begin
       Entries[N].Size := 0;
     end;
     Entries[N].Modified := 0;
+    Entries[N].Permissions := 0;
     Inc(N);
   end;
 
@@ -376,14 +483,22 @@ end;
 
 function TnbLocalFileSource.ParentDir(const APath: string): string;
 begin
+  if Trim(APath) = '' then
+    Exit('');
+
+  if SameText(IncludeTrailingPathDelimiter(APath),
+    IncludeTrailingPathDelimiter(ExtractFileDrive(APath))) then
+    Exit('');
+
   Result := TDirectory.GetParent(ExcludeTrailingPathDelimiter(APath));
-  if Result = '' then
-    Result := APath;
 end;
 
 function TnbLocalFileSource.Combine(const ADir, AName: string): string;
 begin
-  Result := System.IOUtils.TPath.Combine(ADir, AName);
+  if Trim(ADir) = '' then
+    Result := AName
+  else
+    Result := System.IOUtils.TPath.Combine(ADir, AName);
 end;
 
 procedure TnbLocalFileSource.MakeDir(const APath: string);
@@ -446,6 +561,7 @@ begin
     Entries[I].IsDir := AEntries[I].IsDir;
     Entries[I].Size := AEntries[I].Size;
     Entries[I].Modified := AEntries[I].Modified;
+    Entries[I].Permissions := AEntries[I].Permissions;
   end;
   DoListing(APath, Entries);
 end;
@@ -550,6 +666,8 @@ begin
   FInstances.Add(Self);
   FButtons := TList<TnbToolButton>.Create;
   FSelectedIndex := -1;
+  FSortColumn := FILE_SORT_NAME;
+  FSortDescending := False;
   FColBg      := TAlphaColor($FF141820);
   FColSurface := TAlphaColor($FF1C2330);
   FColBorder  := TAlphaColor($FF344056);
@@ -668,6 +786,52 @@ begin
 end;
 
 procedure TnbFilePane.BuildUi;
+
+  procedure AddHeaderCell(const AText: string; AAlign: TAlignLayout;
+    AWidth: Single; AColumn: Integer);
+  var
+    Cell: TLayout;
+    Caption: TLabel;
+    Divider: TRectangle;
+  begin
+    Cell := TLayout.Create(FHeader);
+    Cell.Parent := FHeader;
+    Cell.Align := AAlign;
+    if AWidth > 0 then
+      Cell.Width := AWidth;
+    Cell.Tag := AColumn;
+    Cell.HitTest := True;
+    Cell.OnClick := HandleHeaderClick;
+    Cell.Cursor := crHandPoint;
+
+    Caption := TLabel.Create(Cell);
+    Caption.Parent := Cell;
+    Caption.Align := TAlignLayout.Client;
+    Caption.Margins.Rect := RectF(10, 0, 8, 0);
+    Caption.HitTest := False;
+    Caption.Tag := AColumn;
+    Caption.Text := HeaderCaption(AText, AColumn, FSortColumn, FSortDescending);
+    Caption.StyledSettings := Caption.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size, TStyledSetting.Style];
+    Caption.TextSettings.FontColor := FColText;
+    Caption.TextSettings.Font.Size := 12;
+    Caption.TextSettings.Font.Style := [TFontStyle.fsBold];
+    Caption.TextSettings.VertAlign := TTextAlign.Center;
+    Caption.TextSettings.HorzAlign := TTextAlign.Leading;
+
+    if AAlign <> TAlignLayout.Client then
+    begin
+      Divider := TRectangle.Create(Cell);
+      Divider.Parent := Cell;
+      Divider.Align := TAlignLayout.Left;
+      Divider.Width := 1;
+      Divider.HitTest := False;
+      Divider.Fill.Color := FColBorder;
+      Divider.Stroke.Kind := TBrushKind.None;
+    end;
+  end;
+
+var
+  HeaderLine: TRectangle;
 begin
   FToolBar := TLayout.Create(Self);
   FToolBar.Parent := Self;
@@ -698,7 +862,8 @@ begin
   FListHost.Margins.Rect := RectF(4, 0, 4, 4);
   FListHost.ClipChildren := True;
   FListHost.HitTest := True;
-  FListHost.Fill.Kind := TBrushKind.None;
+  FListHost.Fill.Kind := TBrushKind.Solid;
+  FListHost.Fill.Color := FColBg;
   FListHost.Stroke.Kind := TBrushKind.Solid;
   FListHost.Stroke.Color := FColBorder;
   FListHost.Stroke.Thickness := 1;
@@ -707,15 +872,34 @@ begin
   FListHost.OnDragOver := HandleDragOver;
   FListHost.OnDragDrop := HandleDragDrop;
 
+  FHeader := TLayout.Create(FListHost);
+  FHeader.Parent := FListHost;
+  FHeader.Align := TAlignLayout.Top;
+  FHeader.Height := FILE_HEADER_HEIGHT;
+  FHeader.HitTest := False;
+
+  HeaderLine := TRectangle.Create(FHeader);
+  HeaderLine.Parent := FHeader;
+  HeaderLine.Align := TAlignLayout.Bottom;
+  HeaderLine.Height := 1;
+  HeaderLine.HitTest := False;
+  HeaderLine.Fill.Color := FColBorder;
+  HeaderLine.Stroke.Kind := TBrushKind.None;
+
+  AddHeaderCell('Kind', TAlignLayout.Right, FILE_COL_KIND_WIDTH, FILE_SORT_KIND);
+  AddHeaderCell('Size', TAlignLayout.Right, FILE_COL_SIZE_WIDTH, FILE_SORT_SIZE);
+  AddHeaderCell('Date Modified', TAlignLayout.Right, FILE_COL_DATE_WIDTH, FILE_SORT_DATE);
+  AddHeaderCell('Name', TAlignLayout.Client, 0, FILE_SORT_NAME);
+
   FList := TListBox.Create(FListHost);
   FList.Parent := FListHost;
   FList.Align := TAlignLayout.Client;
-  FList.Margins.Rect := RectF(1, 1, 1, 1);
+  FList.Margins.Rect := RectF(1, 0, 1, 1);
   FList.StyleLookup := 'listboxstyle';
   FList.ShowScrollBars := True;
   FList.ClipChildren := True;
   FList.HitTest := True;
-  FList.ItemHeight := 22;
+  FList.ItemHeight := FILE_ROW_HEIGHT;
   FList.DefaultItemStyles.ItemStyle := 'listboxitemstyle';
   FList.OnDragOver := HandleDragOver;
   FList.OnDragDrop := HandleDragDrop;
@@ -773,6 +957,7 @@ begin
   FPathEdit.Text := APath;
   FEntries := AEntries;
   FSelectedIndex := -1;
+  SortEntries;
   FillList;
 end;
 
@@ -866,23 +1051,23 @@ procedure TnbFilePane.FillList;
 var
   I: Integer;
   Item: TListBoxItem;
-  Caption: string;
+  Entry: TnbFileEntry;
+  RowBg, Line: TRectangle;
+  Row, NameCell, TextStack: TLayout;
+  Icon, NameText, DetailText, DateText, SizeText, KindText: TLabel;
 begin
   FList.BeginUpdate;
   try
     FList.Clear;
     for I := 0 to High(FEntries) do
     begin
-      if FEntries[I].IsDir then
-        Caption := '[D] ' + FEntries[I].Name
-      else
-        Caption := FEntries[I].Name + '   ' + FormatSize(FEntries[I].Size);
+      Entry := FEntries[I];
 
       Item := TListBoxItem.Create(FList);
       Item.Parent := FList;
-      Item.Height := 22;
+      Item.Height := FILE_ROW_HEIGHT;
       Item.Tag := I;
-      Item.Text := Caption;
+      Item.Text := '';
       Item.StyleLookup := 'listboxitemstyle';
       Item.StyledSettings := Item.StyledSettings - [TStyledSetting.FontColor];
       Item.TextSettings.FontColor := FColText;
@@ -898,11 +1083,226 @@ begin
       Item.OnDragOver := HandleDragOver;
       Item.OnDragDrop := HandleDragDrop;
       Item.DragMode := TDragMode.dmManual;
+
+      RowBg := TRectangle.Create(Item);
+      RowBg.Parent := Item;
+      RowBg.Align := TAlignLayout.Contents;
+      RowBg.StyleName := 'file-row-bg';
+      RowBg.HitTest := False;
+      RowBg.Fill.Color := FColBg;
+      RowBg.Stroke.Kind := TBrushKind.None;
+      RowBg.SendToBack;
+
+      Row := TLayout.Create(Item);
+      Row.Parent := Item;
+      Row.Align := TAlignLayout.Client;
+      Row.Margins.Rect := RectF(0, 0, 0, 0);
+      Row.HitTest := False;
+
+      KindText := TLabel.Create(Row);
+      KindText.Parent := Row;
+      KindText.Align := TAlignLayout.Right;
+      KindText.Width := FILE_COL_KIND_WIDTH;
+      KindText.Margins.Rect := RectF(8, 0, 10, 0);
+      KindText.HitTest := False;
+      KindText.Text := EntryKind(Entry);
+      KindText.StyledSettings := KindText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
+      KindText.TextSettings.FontColor := FILE_MUTED_TEXT;
+      KindText.TextSettings.Font.Size := 12;
+      KindText.TextSettings.VertAlign := TTextAlign.Center;
+      KindText.TextSettings.HorzAlign := TTextAlign.Leading;
+
+      SizeText := TLabel.Create(Row);
+      SizeText.Parent := Row;
+      SizeText.Align := TAlignLayout.Right;
+      SizeText.Width := FILE_COL_SIZE_WIDTH;
+      SizeText.Margins.Rect := RectF(8, 0, 8, 0);
+      SizeText.HitTest := False;
+      if Entry.IsDir then
+        SizeText.Text := '--'
+      else
+        SizeText.Text := FormatSize(Entry.Size);
+      SizeText.StyledSettings := SizeText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
+      SizeText.TextSettings.FontColor := FILE_MUTED_TEXT;
+      SizeText.TextSettings.Font.Size := 12;
+      SizeText.TextSettings.VertAlign := TTextAlign.Center;
+      SizeText.TextSettings.HorzAlign := TTextAlign.Leading;
+
+      DateText := TLabel.Create(Row);
+      DateText.Parent := Row;
+      DateText.Align := TAlignLayout.Right;
+      DateText.Width := FILE_COL_DATE_WIDTH;
+      DateText.Margins.Rect := RectF(8, 0, 8, 0);
+      DateText.HitTest := False;
+      DateText.Text := FormatModified(Entry.Modified);
+      DateText.StyledSettings := DateText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
+      DateText.TextSettings.FontColor := FILE_MUTED_TEXT;
+      DateText.TextSettings.Font.Size := 12;
+      DateText.TextSettings.VertAlign := TTextAlign.Center;
+      DateText.TextSettings.HorzAlign := TTextAlign.Leading;
+
+      NameCell := TLayout.Create(Row);
+      NameCell.Parent := Row;
+      NameCell.Align := TAlignLayout.Client;
+      NameCell.HitTest := False;
+
+      Icon := TLabel.Create(NameCell);
+      Icon.Parent := NameCell;
+      Icon.Align := TAlignLayout.Left;
+      Icon.Width := 34;
+      Icon.Margins.Rect := RectF(8, 0, 0, 0);
+      Icon.HitTest := False;
+      if Entry.IsDir then
+        Icon.Text := FILE_ICON_FOLDER
+      else
+        Icon.Text := FILE_ICON_DOCUMENT;
+      Icon.StyledSettings := Icon.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Family, TStyledSetting.Size];
+      Icon.TextSettings.Font.Family := FILE_ICON_FONT;
+      Icon.TextSettings.Font.Size := 18;
+      Icon.TextSettings.FontColor := FILE_ICON_BLUE;
+      Icon.TextSettings.VertAlign := TTextAlign.Center;
+      Icon.TextSettings.HorzAlign := TTextAlign.Center;
+
+      TextStack := TLayout.Create(NameCell);
+      TextStack.Parent := NameCell;
+      TextStack.Align := TAlignLayout.Client;
+      TextStack.Margins.Rect := RectF(0, 5, 8, 4);
+      TextStack.HitTest := False;
+
+      NameText := TLabel.Create(TextStack);
+      NameText.Parent := TextStack;
+      NameText.Align := TAlignLayout.Top;
+      NameText.Height := 18;
+      NameText.HitTest := False;
+      NameText.Text := Entry.Name;
+      NameText.StyledSettings := NameText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size, TStyledSetting.Style];
+      NameText.TextSettings.FontColor := FColText;
+      NameText.TextSettings.Font.Size := 12;
+      NameText.TextSettings.Font.Style := [TFontStyle.fsBold];
+      NameText.TextSettings.VertAlign := TTextAlign.Center;
+      NameText.TextSettings.HorzAlign := TTextAlign.Leading;
+
+      DetailText := TLabel.Create(TextStack);
+      DetailText.Parent := TextStack;
+      DetailText.Align := TAlignLayout.Client;
+      DetailText.HitTest := False;
+      DetailText.Text := FormatPermissions(Entry.Permissions, Entry.IsDir);
+      DetailText.StyledSettings := DetailText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
+      DetailText.TextSettings.FontColor := FILE_MUTED_TEXT;
+      DetailText.TextSettings.Font.Size := 10;
+      DetailText.TextSettings.VertAlign := TTextAlign.Leading;
+      DetailText.TextSettings.HorzAlign := TTextAlign.Leading;
+
+      Line := TRectangle.Create(Item);
+      Line.Parent := Item;
+      Line.Align := TAlignLayout.Bottom;
+      Line.Height := 1;
+      Line.HitTest := False;
+      Line.Fill.Color := FILE_ROW_LINE;
+      Line.Stroke.Kind := TBrushKind.None;
     end;
   finally
     FList.EndUpdate;
   end;
   UpdateScrollThumb;
+end;
+
+procedure TnbFilePane.SortEntries;
+begin
+  TArray.Sort<TnbFileEntry>(FEntries,
+    TComparer<TnbFileEntry>.Construct(
+      function(const L, R: TnbFileEntry): Integer
+      begin
+        if L.IsDir <> R.IsDir then
+        begin
+          if L.IsDir then
+            Exit(-1);
+          Exit(1);
+        end;
+
+        case FSortColumn of
+          FILE_SORT_DATE:
+            Result := CompareValue(L.Modified, R.Modified);
+          FILE_SORT_SIZE:
+            Result := CompareValue(L.Size, R.Size);
+          FILE_SORT_KIND:
+            Result := CompareText(EntryKind(L), EntryKind(R));
+        else
+          Result := CompareText(L.Name, R.Name);
+        end;
+
+        if FSortDescending then
+          Result := -Result;
+        if Result = 0 then
+          Result := CompareText(L.Name, R.Name);
+      end));
+end;
+
+procedure TnbFilePane.UpdateHeaderCaptions;
+var
+  I, J, Column: Integer;
+  Cell, Child: TFmxObject;
+begin
+  if FHeader = nil then Exit;
+  for I := 0 to FHeader.ChildrenCount - 1 do
+  begin
+    Cell := FHeader.Children[I];
+    if not (Cell is TLayout) then
+      Continue;
+    Column := Cell.Tag;
+    for J := 0 to Cell.ChildrenCount - 1 do
+    begin
+      Child := Cell.Children[J];
+      if Child is TLabel then
+        TLabel(Child).Text := HeaderCaption(HeaderBaseCaption(Column),
+          Column, FSortColumn, FSortDescending);
+    end;
+  end;
+end;
+
+procedure TnbFilePane.HandleHeaderClick(Sender: TObject);
+var
+  Column, I: Integer;
+  HadSelection: Boolean;
+  SelectedName: string;
+  SelectedIsDir: Boolean;
+  Entry: TnbFileEntry;
+begin
+  if not (Sender is TFmxObject) then Exit;
+
+  Column := TFmxObject(Sender).Tag;
+  if Column = FSortColumn then
+    FSortDescending := not FSortDescending
+  else
+  begin
+    FSortColumn := Column;
+    FSortDescending := False;
+  end;
+
+  HadSelection := SelectedEntry(Entry);
+  SelectedName := '';
+  SelectedIsDir := False;
+  if HadSelection then
+  begin
+    SelectedName := Entry.Name;
+    SelectedIsDir := Entry.IsDir;
+  end;
+
+  SortEntries;
+  FSelectedIndex := -1;
+  if HadSelection then
+    for I := 0 to High(FEntries) do
+      if (FEntries[I].IsDir = SelectedIsDir)
+        and SameText(FEntries[I].Name, SelectedName) then
+      begin
+        FSelectedIndex := I;
+        Break;
+      end;
+
+  UpdateHeaderCaptions;
+  FillList;
+  UpdateRowSelection;
+  EnsureSelectedVisible;
 end;
 
 function TnbFilePane.SelectedEntry(out AEntry: TnbFileEntry): Boolean;
@@ -1084,8 +1484,10 @@ end;
 
 procedure TnbFilePane.UpdateRowSelection;
 var
-  I: Integer;
+  I, J: Integer;
   Item: TListBoxItem;
+  Child: TFmxObject;
+  RowBg: TRectangle;
 begin
   if FList = nil then Exit;
   FList.ItemIndex := FSelectedIndex;
@@ -1095,6 +1497,23 @@ begin
     Item.StyledSettings := Item.StyledSettings - [TStyledSetting.FontColor];
     Item.TextSettings.FontColor := FColText;
     Item.IsSelected := Item.Tag = FSelectedIndex;
+    RowBg := nil;
+    for J := 0 to Item.ChildrenCount - 1 do
+    begin
+      Child := Item.Children[J];
+      if (Child is TRectangle) and SameText(Child.StyleName, 'file-row-bg') then
+      begin
+        RowBg := TRectangle(Child);
+        Break;
+      end;
+    end;
+    if RowBg <> nil then
+    begin
+      if Item.IsSelected then
+        RowBg.Fill.Color := FSelectionColor
+      else
+        RowBg.Fill.Color := FColBg;
+    end;
   end;
 end;
 
@@ -1196,11 +1615,13 @@ begin
   end;
   if FListHost <> nil then
   begin
-    FListHost.Fill.Kind := TBrushKind.None;
+    FListHost.Fill.Kind := TBrushKind.Solid;
+    FListHost.Fill.Color := ABg;
     FListHost.Stroke.Kind := TBrushKind.Solid;
     FListHost.Stroke.Color := ABorder;
     FListHost.Stroke.Thickness := 1;
   end;
+  FillList;
   UpdateRowSelection;
 end;
 
