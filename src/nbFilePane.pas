@@ -132,6 +132,7 @@ type
     function AddActionButton(const AGlyph, AHint: string;
       AOnClick: TNotifyEvent): TnbToolButton;
 
+  published
     property OnTransfer: TNotifyEvent read FOnTransfer write FOnTransfer;
     property OnActivated: TNotifyEvent read FOnActivated write FOnActivated;
     property OnError: TnbFileErrorEvent read FOnError write FOnError;

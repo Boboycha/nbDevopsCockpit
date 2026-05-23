@@ -1,4 +1,4 @@
-unit Reg_nbDevOpsCockpit;
+﻿unit Reg_nbDevOpsCockpit;
 
 (*
   Design-time registration for nbDevOpsCockpit.
@@ -17,12 +17,14 @@ uses
   System.Classes,
   DesignIntf,
   ModernSSHClient,
-  Terminal.Control;
+  Terminal.Control,
+  nbFilePane;
 
 const
   PaletteName = 'nb DevOps';
   SshCategory = 'nb DevOps SSH';
   TerminalCategory = 'nb DevOps Terminal';
+  FilePaneCategory = 'nb DevOps File Pane';
   TerminalBehaviorCategory = 'nb DevOps Behavior';
   DevOpsEventsCategory = 'nb DevOps Events';
 
@@ -77,15 +79,35 @@ begin
   ]);
 end;
 
+procedure RegisterFilePaneDesignTime;
+begin
+  RegisterPropertiesInCategory(FilePaneCategory, TnbFilePane, [
+    'Align',
+    'Anchors',
+    'Margins',
+    'Padding',
+    'TabStop'
+  ]);
+
+  RegisterPropertiesInCategory(DevOpsEventsCategory, TnbFilePane, [
+    'OnTransfer',
+    'OnActivated',
+    'OnError',
+    'OnFileDrop'
+  ]);
+end;
+
 procedure Register;
 begin
   RegisterComponents(PaletteName, [
     TnbSSHClient,
-    TnbTerminalControl
+    TnbTerminalControl,
+    TnbFilePane
   ]);
 
   RegisterSSHDesignTime;
   RegisterTerminalDesignTime;
+  RegisterFilePaneDesignTime;
 end;
 
 end.
