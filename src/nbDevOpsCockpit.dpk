@@ -37,6 +37,8 @@ requires
   Skia.Package.FMX;
 
 contains
+  nbSSH.LibSSH2 in 'nbSSH.LibSSH2.pas',
+  nbSSH.KeyValidation in 'nbSSH.KeyValidation.pas',
   ModernSSHClient in 'ModernSSHClient.pas',
   Terminal.Types in 'Terminal.Types.pas',
   Terminal.Theme in 'Terminal.Theme.pas',
@@ -44,6 +46,8 @@ contains
   Terminal.AnsiParser in 'Terminal.AnsiParser.pas',
   Terminal.Renderer in 'Terminal.Renderer.pas',
   Terminal.Control in 'Terminal.Control.pas',
+  nbFileSources in 'nbFileSources.pas',
+  nbFilePane.Controls in 'nbFilePane.Controls.pas',
   nbSFTPClient in 'nbSFTPClient.pas',
   nbSFTPTransfer in 'nbSFTPTransfer.pas',
   nbFilePane in 'nbFilePane.pas',

@@ -19,119 +19,26 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Types, System.UITypes,
-  System.Generics.Collections, System.Generics.Defaults, System.IOUtils,
+  System.Generics.Collections, System.Generics.Defaults,
   FMX.Types, FMX.Controls, FMX.Graphics, FMX.Layouts, FMX.StdCtrls,
   FMX.Objects, FMX.Edit, FMX.ListBox,
-  nbSFTPClient;
+  nbFileSources, nbFilePane.Controls;
 
 type
   TnbFilePane = class;
 
-  (* Единая запись о файле/папке для локального и удалённого источника. *)
-  TnbFileEntry = record
-    Name: string;
-    IsDir: Boolean;
-    Size: Int64;
-    Modified: TDateTime;
-    Permissions: Cardinal;
-  end;
-  TnbFileEntryArray = array of TnbFileEntry;
+  TnbFileEntry = nbFileSources.TnbFileEntry;
+  TnbFileEntryArray = nbFileSources.TnbFileEntryArray;
+  TnbFileListingEvent = nbFileSources.TnbFileListingEvent;
+  TnbFileErrorEvent = nbFileSources.TnbFileErrorEvent;
+  InbFileSource = nbFileSources.InbFileSource;
+  TnbFileSourceBase = nbFileSources.TnbFileSourceBase;
+  TnbLocalFileSource = nbFileSources.TnbLocalFileSource;
+  TnbSFTPFileSource = nbFileSources.TnbSFTPFileSource;
+  TnbToolButton = nbFilePane.Controls.TnbToolButton;
 
-  TnbFileListingEvent = procedure(Sender: TObject; const APath: string;
-    const AEntries: TnbFileEntryArray) of object;
-  TnbFileErrorEvent = procedure(Sender: TObject; const AMsg: string) of object;
   TnbFilePaneDropEvent = procedure(Sender: TObject;
     ASourcePane: TnbFilePane) of object;
-
-  (* Абстракция источника файлов. ListDir асинхронный — результат через
-     OnListing. OnChanged — после mkdir/rename/delete (панель перечитывает). *)
-  InbFileSource = interface
-    ['{6F1B6A20-2C44-4E2C-9E51-1B8D7F2A9C01}']
-    procedure ListDir(const APath: string);
-    function  ParentDir(const APath: string): string;
-    function  Combine(const ADir, AName: string): string;
-    procedure MakeDir(const APath: string);
-    procedure Rename(const AOldPath, ANewPath: string);
-    procedure Delete(const APath: string; AIsDir: Boolean);
-
-    function  GetOnListing: TnbFileListingEvent;
-    procedure SetOnListing(const AValue: TnbFileListingEvent);
-    function  GetOnError: TnbFileErrorEvent;
-    procedure SetOnError(const AValue: TnbFileErrorEvent);
-    function  GetOnChanged: TNotifyEvent;
-    procedure SetOnChanged(const AValue: TNotifyEvent);
-
-    property OnListing: TnbFileListingEvent read GetOnListing write SetOnListing;
-    property OnError: TnbFileErrorEvent read GetOnError write SetOnError;
-    property OnChanged: TNotifyEvent read GetOnChanged write SetOnChanged;
-  end;
-
-  (* Базовая реализация хранения событий — общая для local/remote. *)
-  TnbFileSourceBase = class(TInterfacedObject, InbFileSource)
-  protected
-    FOnListing: TnbFileListingEvent;
-    FOnError: TnbFileErrorEvent;
-    FOnChanged: TNotifyEvent;
-    procedure DoListing(const APath: string; const AEntries: TnbFileEntryArray);
-    procedure DoError(const AMsg: string);
-    procedure DoChanged;
-  public
-    procedure ListDir(const APath: string); virtual; abstract;
-    function  ParentDir(const APath: string): string; virtual; abstract;
-    function  Combine(const ADir, AName: string): string; virtual; abstract;
-    procedure MakeDir(const APath: string); virtual; abstract;
-    procedure Rename(const AOldPath, ANewPath: string); virtual; abstract;
-    procedure Delete(const APath: string; AIsDir: Boolean); virtual; abstract;
-
-    function  GetOnListing: TnbFileListingEvent;
-    procedure SetOnListing(const AValue: TnbFileListingEvent);
-    function  GetOnError: TnbFileErrorEvent;
-    procedure SetOnError(const AValue: TnbFileErrorEvent);
-    function  GetOnChanged: TNotifyEvent;
-    procedure SetOnChanged(const AValue: TNotifyEvent);
-  end;
-
-  (* Локальная ФС через System.IOUtils — синхронная. *)
-  TnbLocalFileSource = class(TnbFileSourceBase)
-  public
-    procedure ListDir(const APath: string); override;
-    function  ParentDir(const APath: string): string; override;
-    function  Combine(const ADir, AName: string): string; override;
-    procedure MakeDir(const APath: string); override;
-    procedure Rename(const AOldPath, ANewPath: string); override;
-    procedure Delete(const APath: string; AIsDir: Boolean); override;
-  end;
-
-  (* Удалённая ФС поверх TnbSFTPClient. Источник НЕ владеет клиентом —
-     перехватывает только OnDirListing/OnOpDone/OnError. Передачу
-     (Upload/Download/Progress) держит у себя владелец клиента. *)
-  TnbSFTPFileSource = class(TnbFileSourceBase)
-  private
-    FClient: TnbSFTPClient;
-    FPendingPath: string;
-    procedure HandleDirListing(Sender: TObject; const APath: string;
-      const AEntries: TSFTPEntryArray);
-    procedure HandleOpDone(Sender: TObject);
-    procedure HandleError(Sender: TObject; const AMsg: string);
-  public
-    constructor Create(AClient: TnbSFTPClient);
-    procedure ListDir(const APath: string); override;
-    function  ParentDir(const APath: string): string; override;
-    function  Combine(const ADir, AName: string): string; override;
-    procedure MakeDir(const APath: string); override;
-    procedure Rename(const AOldPath, ANewPath: string); override;
-    procedure Delete(const APath: string; AIsDir: Boolean); override;
-  end;
-
-  (* Компактная FMX-кнопка тулбара: вид приходит из активного StyleBook. *)
-  TnbToolButton = class(TSpeedButton)
-  private
-    procedure SetGlyphText(const AValue: string);
-  public
-    constructor Create(AOwner: TComponent); override;
-    procedure SetGlyphColor(AColor: TAlphaColor);
-    property Glyph: string write SetGlyphText;
-  end;
 
   TnbFilePane = class(TLayout)
   private
@@ -235,426 +142,10 @@ type
 implementation
 
 uses
-  System.Math, System.StrUtils, FMX.Dialogs, FMX.Forms;
-
-const
-  FILE_ICON_FONT       = 'Segoe MDL2 Assets';
-  FILE_ICON_UP         = #$E74A;
-  FILE_ICON_REFRESH    = #$E72C;
-  FILE_ICON_NEW_FOLDER = #$E8F4;
-  FILE_ICON_RENAME     = #$E8AC;
-  FILE_ICON_DELETE     = #$E74D;
-  FILE_ICON_UPLOAD     = #$E898;
-  FILE_ICON_DOWNLOAD   = #$E896;
-  FILE_ICON_TRANSFER   = #$E8AB;
-  FILE_ICON_FOLDER     = #$E8B7;
-  FILE_ICON_DOCUMENT   = #$E8A5;
-
-  FILE_ROW_HEIGHT      = 44;
-  FILE_HEADER_HEIGHT   = 36;
-  FILE_COL_DATE_WIDTH  = 150;
-  FILE_COL_SIZE_WIDTH  = 78;
-  FILE_COL_KIND_WIDTH  = 92;
-  FILE_MUTED_TEXT      = TAlphaColor($FF8B98AA);
-  FILE_ICON_BLUE       = TAlphaColor($FF6EC8F2);
-  FILE_ROW_LINE        = TAlphaColor($222F3A4A);
-
-  FILE_SORT_NAME       = 0;
-  FILE_SORT_DATE       = 1;
-  FILE_SORT_SIZE       = 2;
-  FILE_SORT_KIND       = 3;
+  System.Math, FMX.Dialogs, FMX.Forms;
 
 type
   TControlAccess = class(TControl);
-
-function FileToolIconFor(const AGlyph, AHint: string): string;
-begin
-  if ContainsText(AHint, 'вверх') or (AGlyph = #$2191) then
-    Exit(FILE_ICON_UP);
-  if ContainsText(AHint, 'обнов') or SameText(AGlyph, 'R') then
-    Exit(FILE_ICON_REFRESH);
-  if ContainsText(AHint, 'новая папка') or (AGlyph = '+') then
-    Exit(FILE_ICON_NEW_FOLDER);
-  if ContainsText(AHint, 'переимен') or SameText(AGlyph, 'N') then
-    Exit(FILE_ICON_RENAME);
-  if ContainsText(AHint, 'удал') or SameText(AGlyph, 'X') then
-    Exit(FILE_ICON_DELETE);
-  if ContainsText(AHint, 'загруз') then
-    Exit(FILE_ICON_UPLOAD);
-  if ContainsText(AHint, 'скач') then
-    Exit(FILE_ICON_DOWNLOAD);
-  if (AGlyph = #$2192) or (AGlyph = #$2190) then
-    Exit(FILE_ICON_TRANSFER);
-
-  Result := AGlyph;
-end;
-
-function FormatSize(ASize: Int64): string;
-begin
-  if ASize < 1024 then
-    Result := ASize.ToString + ' Б'
-  else if ASize < 1024 * 1024 then
-    Result := Format('%.1f КБ', [ASize / 1024])
-  else
-    Result := Format('%.1f МБ', [ASize / 1024 / 1024]);
-end;
-
-function FormatModified(ADate: TDateTime): string;
-begin
-  if ADate <= 0 then
-    Exit('');
-  Result := FormatDateTime('m/d/yyyy, h:nn AM/PM', ADate);
-end;
-
-function FormatPermissions(APermissions: Cardinal; AIsDir: Boolean): string;
-
-  function PermissionChar(AMask: Cardinal; AChar: Char): Char;
-  begin
-    if (APermissions and AMask) <> 0 then
-      Result := AChar
-    else
-      Result := '-';
-  end;
-
-begin
-  if APermissions = 0 then
-  begin
-    if AIsDir then
-      Exit('folder');
-    Exit('file');
-  end;
-
-  if AIsDir then
-    Result := 'd'
-  else
-    Result := '-';
-  Result := Result
-    + PermissionChar($100, 'r') + PermissionChar($080, 'w') + PermissionChar($040, 'x')
-    + PermissionChar($020, 'r') + PermissionChar($010, 'w') + PermissionChar($008, 'x')
-    + PermissionChar($004, 'r') + PermissionChar($002, 'w') + PermissionChar($001, 'x');
-end;
-
-function EntryKind(const AEntry: TnbFileEntry): string;
-begin
-  if AEntry.IsDir then
-    Result := 'folder'
-  else
-    Result := 'file';
-end;
-
-function HeaderBaseCaption(AColumn: Integer): string;
-begin
-  case AColumn of
-    FILE_SORT_DATE: Result := 'Date Modified';
-    FILE_SORT_SIZE: Result := 'Size';
-    FILE_SORT_KIND: Result := 'Kind';
-  else
-    Result := 'Name';
-  end;
-end;
-
-function HeaderCaption(const AText: string; AColumn, ASortColumn: Integer;
-  ASortDescending: Boolean): string;
-begin
-  Result := AText;
-  if AColumn <> ASortColumn then
-    Exit;
-  if ASortDescending then
-    Result := Result + ' v'
-  else
-    Result := Result + ' ^';
-end;
-
-{ TnbFileSourceBase }
-
-procedure TnbFileSourceBase.DoListing(const APath: string;
-  const AEntries: TnbFileEntryArray);
-begin
-  if Assigned(FOnListing) then
-    FOnListing(Self, APath, AEntries);
-end;
-
-procedure TnbFileSourceBase.DoError(const AMsg: string);
-begin
-  if Assigned(FOnError) then
-    FOnError(Self, AMsg);
-end;
-
-procedure TnbFileSourceBase.DoChanged;
-begin
-  if Assigned(FOnChanged) then
-    FOnChanged(Self);
-end;
-
-function TnbFileSourceBase.GetOnListing: TnbFileListingEvent;
-begin
-  Result := FOnListing;
-end;
-
-procedure TnbFileSourceBase.SetOnListing(const AValue: TnbFileListingEvent);
-begin
-  FOnListing := AValue;
-end;
-
-function TnbFileSourceBase.GetOnError: TnbFileErrorEvent;
-begin
-  Result := FOnError;
-end;
-
-procedure TnbFileSourceBase.SetOnError(const AValue: TnbFileErrorEvent);
-begin
-  FOnError := AValue;
-end;
-
-function TnbFileSourceBase.GetOnChanged: TNotifyEvent;
-begin
-  Result := FOnChanged;
-end;
-
-procedure TnbFileSourceBase.SetOnChanged(const AValue: TNotifyEvent);
-begin
-  FOnChanged := AValue;
-end;
-
-{ TnbLocalFileSource }
-
-procedure TnbLocalFileSource.ListDir(const APath: string);
-var
-  Dirs, Files: TStringDynArray;
-  Entries: TnbFileEntryArray;
-  I, N: Integer;
-begin
-  if Trim(APath) = '' then
-  begin
-    Dirs := TDirectory.GetLogicalDrives;
-    SetLength(Entries, Length(Dirs));
-    for I := 0 to High(Dirs) do
-    begin
-      Entries[I].Name := IncludeTrailingPathDelimiter(Dirs[I]);
-      Entries[I].IsDir := True;
-      Entries[I].Size := 0;
-      Entries[I].Modified := 0;
-      Entries[I].Permissions := 0;
-    end;
-    DoListing('', Entries);
-    Exit;
-  end;
-
-  try
-    Dirs := TDirectory.GetDirectories(APath);
-    Files := TDirectory.GetFiles(APath);
-  except
-    on E: Exception do
-    begin
-      DoError(E.Message);
-      Exit;
-    end;
-  end;
-
-  (* TPath квалифицируем полностью: FMX.Objects тоже экспортирует TPath
-     (графический контрол) и перекрывает System.IOUtils.TPath. *)
-  SetLength(Entries, Length(Dirs) + Length(Files));
-  N := 0;
-  for I := 0 to High(Dirs) do
-  begin
-    Entries[N].Name := System.IOUtils.TPath.GetFileName(Dirs[I]);
-    Entries[N].IsDir := True;
-    Entries[N].Size := 0;
-    Entries[N].Modified := 0;
-    Entries[N].Permissions := 0;
-    Inc(N);
-  end;
-  for I := 0 to High(Files) do
-  begin
-    Entries[N].Name := System.IOUtils.TPath.GetFileName(Files[I]);
-    Entries[N].IsDir := False;
-    try
-      Entries[N].Size := TFile.GetSize(Files[I]);
-    except
-      Entries[N].Size := 0;
-    end;
-    Entries[N].Modified := 0;
-    Entries[N].Permissions := 0;
-    Inc(N);
-  end;
-
-  DoListing(APath, Entries);
-end;
-
-function TnbLocalFileSource.ParentDir(const APath: string): string;
-begin
-  if Trim(APath) = '' then
-    Exit('');
-
-  if SameText(IncludeTrailingPathDelimiter(APath),
-    IncludeTrailingPathDelimiter(ExtractFileDrive(APath))) then
-    Exit('');
-
-  Result := TDirectory.GetParent(ExcludeTrailingPathDelimiter(APath));
-end;
-
-function TnbLocalFileSource.Combine(const ADir, AName: string): string;
-begin
-  if Trim(ADir) = '' then
-    Result := AName
-  else
-    Result := System.IOUtils.TPath.Combine(ADir, AName);
-end;
-
-procedure TnbLocalFileSource.MakeDir(const APath: string);
-begin
-  try
-    TDirectory.CreateDirectory(APath);
-    DoChanged;
-  except
-    on E: Exception do DoError(E.Message);
-  end;
-end;
-
-procedure TnbLocalFileSource.Rename(const AOldPath, ANewPath: string);
-begin
-  try
-    if TDirectory.Exists(AOldPath) then
-      TDirectory.Move(AOldPath, ANewPath)
-    else
-      TFile.Move(AOldPath, ANewPath);
-    DoChanged;
-  except
-    on E: Exception do DoError(E.Message);
-  end;
-end;
-
-procedure TnbLocalFileSource.Delete(const APath: string; AIsDir: Boolean);
-begin
-  try
-    if AIsDir then
-      TDirectory.Delete(APath, True)
-    else
-      TFile.Delete(APath);
-    DoChanged;
-  except
-    on E: Exception do DoError(E.Message);
-  end;
-end;
-
-{ TnbSFTPFileSource }
-
-constructor TnbSFTPFileSource.Create(AClient: TnbSFTPClient);
-begin
-  inherited Create;
-  FClient := AClient;
-  FClient.OnDirListing := HandleDirListing;
-  FClient.OnOpDone := HandleOpDone;
-  FClient.OnError := HandleError;
-end;
-
-procedure TnbSFTPFileSource.HandleDirListing(Sender: TObject;
-  const APath: string; const AEntries: TSFTPEntryArray);
-var
-  Entries: TnbFileEntryArray;
-  I: Integer;
-begin
-  SetLength(Entries, Length(AEntries));
-  for I := 0 to High(AEntries) do
-  begin
-    Entries[I].Name := AEntries[I].Name;
-    Entries[I].IsDir := AEntries[I].IsDir;
-    Entries[I].Size := AEntries[I].Size;
-    Entries[I].Modified := AEntries[I].Modified;
-    Entries[I].Permissions := AEntries[I].Permissions;
-  end;
-  DoListing(APath, Entries);
-end;
-
-procedure TnbSFTPFileSource.HandleOpDone(Sender: TObject);
-begin
-  DoChanged;
-end;
-
-procedure TnbSFTPFileSource.HandleError(Sender: TObject; const AMsg: string);
-begin
-  DoError(AMsg);
-end;
-
-procedure TnbSFTPFileSource.ListDir(const APath: string);
-begin
-  FPendingPath := APath;
-  FClient.ListDir(APath);
-end;
-
-function TnbSFTPFileSource.ParentDir(const APath: string): string;
-var
-  P: Integer;
-  S: string;
-begin
-  S := APath;
-  if (Length(S) > 1) and (S[High(S)] = '/') then
-    SetLength(S, Length(S) - 1);
-  P := S.LastDelimiter('/');
-  if P <= 0 then
-    Result := '/'
-  else
-    Result := Copy(S, 1, P);  (* включая '/' *)
-  if Result = '' then
-    Result := '/';
-end;
-
-function TnbSFTPFileSource.Combine(const ADir, AName: string): string;
-begin
-  if (ADir = '') or (ADir = '/') then
-    Result := '/' + AName
-  else if ADir[High(ADir)] = '/' then
-    Result := ADir + AName
-  else
-    Result := ADir + '/' + AName;
-end;
-
-procedure TnbSFTPFileSource.MakeDir(const APath: string);
-begin
-  FClient.MakeDir(APath);
-end;
-
-procedure TnbSFTPFileSource.Rename(const AOldPath, ANewPath: string);
-begin
-  FClient.Rename(AOldPath, ANewPath);
-end;
-
-procedure TnbSFTPFileSource.Delete(const APath: string; AIsDir: Boolean);
-begin
-  if AIsDir then
-    FClient.RemoveDir(APath)
-  else
-    FClient.Delete(APath);
-end;
-
-{ TnbToolButton }
-
-constructor TnbToolButton.Create(AOwner: TComponent);
-begin
-  inherited;
-  Align := TAlignLayout.Left;
-  Width := 30;
-  Margins.Rect := RectF(0, 2, 4, 2);
-  StyledSettings := StyledSettings - [TStyledSetting.Family,
-    TStyledSetting.Size, TStyledSetting.FontColor];
-  TextSettings.Font.Family := FILE_ICON_FONT;
-  TextSettings.Font.Size := 16;
-  TextSettings.FontColor := TAlphaColor($FFCCD4DE);
-  TextSettings.HorzAlign := TTextAlign.Center;
-  TextSettings.VertAlign := TTextAlign.Center;
-  TextSettings.Trimming := TTextTrimming.None;
-end;
-
-procedure TnbToolButton.SetGlyphText(const AValue: string);
-begin
-  Text := AValue;
-end;
-
-procedure TnbToolButton.SetGlyphColor(AColor: TAlphaColor);
-begin
-  StyledSettings := StyledSettings - [TStyledSetting.FontColor];
-  TextSettings.FontColor := AColor;
-end;
 
 { TnbFilePane }
 
@@ -810,7 +301,7 @@ procedure TnbFilePane.BuildUi;
     Caption.Margins.Rect := RectF(10, 0, 8, 0);
     Caption.HitTest := False;
     Caption.Tag := AColumn;
-    Caption.Text := HeaderCaption(AText, AColumn, FSortColumn, FSortDescending);
+    Caption.Text := FileHeaderCaption(AText, AColumn, FSortColumn, FSortDescending);
     Caption.StyledSettings := Caption.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size, TStyledSetting.Style];
     Caption.TextSettings.FontColor := FColText;
     Caption.TextSettings.Font.Size := 12;
@@ -1105,7 +596,7 @@ begin
       KindText.Width := FILE_COL_KIND_WIDTH;
       KindText.Margins.Rect := RectF(8, 0, 10, 0);
       KindText.HitTest := False;
-      KindText.Text := EntryKind(Entry);
+      KindText.Text := FileEntryKind(Entry);
       KindText.StyledSettings := KindText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
       KindText.TextSettings.FontColor := FILE_MUTED_TEXT;
       KindText.TextSettings.Font.Size := 12;
@@ -1121,7 +612,7 @@ begin
       if Entry.IsDir then
         SizeText.Text := '--'
       else
-        SizeText.Text := FormatSize(Entry.Size);
+        SizeText.Text := FormatFileSize(Entry.Size);
       SizeText.StyledSettings := SizeText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
       SizeText.TextSettings.FontColor := FILE_MUTED_TEXT;
       SizeText.TextSettings.Font.Size := 12;
@@ -1134,7 +625,7 @@ begin
       DateText.Width := FILE_COL_DATE_WIDTH;
       DateText.Margins.Rect := RectF(8, 0, 8, 0);
       DateText.HitTest := False;
-      DateText.Text := FormatModified(Entry.Modified);
+      DateText.Text := FormatFileModified(Entry.Modified);
       DateText.StyledSettings := DateText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
       DateText.TextSettings.FontColor := FILE_MUTED_TEXT;
       DateText.TextSettings.Font.Size := 12;
@@ -1186,7 +677,7 @@ begin
       DetailText.Parent := TextStack;
       DetailText.Align := TAlignLayout.Client;
       DetailText.HitTest := False;
-      DetailText.Text := FormatPermissions(Entry.Permissions, Entry.IsDir);
+      DetailText.Text := FormatFilePermissions(Entry.Permissions, Entry.IsDir);
       DetailText.StyledSettings := DetailText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
       DetailText.TextSettings.FontColor := FILE_MUTED_TEXT;
       DetailText.TextSettings.Font.Size := 10;
@@ -1226,7 +717,7 @@ begin
           FILE_SORT_SIZE:
             Result := CompareValue(L.Size, R.Size);
           FILE_SORT_KIND:
-            Result := CompareText(EntryKind(L), EntryKind(R));
+            Result := CompareText(FileEntryKind(L), FileEntryKind(R));
         else
           Result := CompareText(L.Name, R.Name);
         end;
@@ -1254,7 +745,7 @@ begin
     begin
       Child := Cell.Children[J];
       if Child is TLabel then
-        TLabel(Child).Text := HeaderCaption(HeaderBaseCaption(Column),
+        TLabel(Child).Text := FileHeaderCaption(FileHeaderBaseCaption(Column),
           Column, FSortColumn, FSortDescending);
     end;
   end;
