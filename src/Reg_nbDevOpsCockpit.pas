@@ -1,22 +1,10 @@
 unit Reg_nbDevOpsCockpit;
 
 (*
-  Регистрация компонентов пакета nbDevOpsCockpit в палитре Delphi.
+  Design-time registration for nbDevOpsCockpit.
 
-  Runtime-юниты живут в nbDevOpsCockpit, а этот юнит подключается только
-  design-time пакетом dclnbDevOpsCockpit.
-
-  Текущие компоненты:
-    TnbSSHClient       - SSH-соединение через libssh2
-    TnbTerminalControl - визуальный xterm-256color терминал
-
-  Запланировано добавить:
-    TnbGitLabClient    - REST-клиент для GitLab API
-    TnbServerInventory - инвентарь серверов с привязкой к проектам
-    TnbSnippetRunner   - выполнение скриптов на удаленных серверах
-    ...
-
-  Палитра: "nb DevOps"
+  Runtime units live in nbDevOpsCockpit. This unit is compiled only into
+  dclnbDevOpsCockpit and may depend on DesignIDE/ToolsAPI units.
 *)
 
 interface
@@ -27,28 +15,77 @@ implementation
 
 uses
   System.Classes,
+  DesignIntf,
   ModernSSHClient,
   Terminal.Control;
 
+const
+  PaletteName = 'nb DevOps';
+  SshCategory = 'nb DevOps SSH';
+  TerminalCategory = 'nb DevOps Terminal';
+  TerminalBehaviorCategory = 'nb DevOps Behavior';
+  DevOpsEventsCategory = 'nb DevOps Events';
+
+procedure RegisterSSHDesignTime;
+begin
+  RegisterPropertiesInCategory(SshCategory, TnbSSHClient, [
+    'Host',
+    'Port',
+    'User',
+    'Password',
+    'KeyPath',
+    'Passphrase',
+    'InitialCols',
+    'InitialRows',
+    'ConnectionTimeoutMs',
+    'WakeOnConnect'
+  ]);
+
+  RegisterPropertiesInCategory(DevOpsEventsCategory, TnbSSHClient, [
+    'OnStatusChange',
+    'OnReadData',
+    'OnConnecting',
+    'OnAuthenticating',
+    'OnConnected',
+    'OnDisconnected',
+    'OnError',
+    'OnVerifyHostKey'
+  ]);
+end;
+
+procedure RegisterTerminalDesignTime;
+begin
+  RegisterPropertiesInCategory(TerminalCategory, TnbTerminalControl, [
+    'FontSize',
+    'FontFamily',
+    'FontBold',
+    'FontItalic',
+    'Theme',
+    'SSHClient'
+  ]);
+
+  RegisterPropertiesInCategory(TerminalBehaviorCategory, TnbTerminalControl, [
+    'EnableSyntaxHighlighting',
+    'AutoCopySelection',
+    'PasteOnRightClick'
+  ]);
+
+  RegisterPropertiesInCategory(DevOpsEventsCategory, TnbTerminalControl, [
+    'OnData',
+    'OnUserInput',
+    'OnHostOutput'
+  ]);
+end;
+
 procedure Register;
 begin
-  RegisterComponents('nb DevOps', [
+  RegisterComponents(PaletteName, [
     TnbSSHClient,
     TnbTerminalControl
   ]);
 
-  (* По мере появления новых компонентов добавлять сюда:
-
-  RegisterComponents('nb DevOps', [
-    TnbGitLabClient,
-    TnbServerInventory
-  ]);
-
-  Можно регистрировать в нескольких подгруппах одной палитры:
-  RegisterComponents('nb DevOps SSH',  [TnbSSHClient, TnbTerminalControl]);
-  RegisterComponents('nb DevOps Git',  [TnbGitLabClient]);
-  RegisterComponents('nb DevOps Data', [TnbServerInventory]);
-  *)
+  RegisterSSHDesignTime;
+  RegisterTerminalDesignTime;
 end;
 
 end.

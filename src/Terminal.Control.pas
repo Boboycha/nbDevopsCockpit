@@ -125,19 +125,8 @@ protected
     property Buffer: TTerminalBuffer read FBuffer;
     property Parser: TAnsiParser read FParser;
     property Renderer: TTerminalRenderer read FRenderer;
-    property OnData: TTerminalDataEvent read FOnData write FOnData;
-    (* OnUserInput — только ввод пользователя (клавиатура и вставка из буфера),
-       без авто-ответов терминала и mouse-tracking. Предназначено для
-       зеркалирования ввода (broadcast) во внешних приложениях. *)
-    property OnUserInput: TTerminalDataEvent read FOnUserInput write FOnUserInput;
-    property OnHostOutput: TTerminalHostOutputEvent
-      read FOnHostOutput write FOnHostOutput;
     property Cols: Integer read GetCols;
     property Rows: Integer read GetRows;
-
-    property EnableSyntaxHighlighting: Boolean read FEnableSyntaxHighlighting write FEnableSyntaxHighlighting;
-    property AutoCopySelection: Boolean read FAutoCopySelection write FAutoCopySelection;
-    property PasteOnRightClick: Boolean read FPasteOnRightClick write FPasteOnRightClick;
 
   published
     property FontSize: Single read GetFontSize write SetFontSize;
@@ -146,6 +135,18 @@ protected
     property FontItalic: Boolean read GetFontItalic write SetFontItalic;
     property Theme: TTerminalTheme read GetTheme write SetTheme;
     property SSHClient: TnbSSHClient read GetSSHClient write SetSSHClient;
+    property EnableSyntaxHighlighting: Boolean read FEnableSyntaxHighlighting
+      write FEnableSyntaxHighlighting default False;
+    property AutoCopySelection: Boolean read FAutoCopySelection
+      write FAutoCopySelection default True;
+    property PasteOnRightClick: Boolean read FPasteOnRightClick
+      write FPasteOnRightClick default True;
+    property OnData: TTerminalDataEvent read FOnData write FOnData;
+    (* OnUserInput is keyboard/paste input only. It excludes terminal
+       auto-responses and mouse-tracking bytes. *)
+    property OnUserInput: TTerminalDataEvent read FOnUserInput write FOnUserInput;
+    property OnHostOutput: TTerminalHostOutputEvent
+      read FOnHostOutput write FOnHostOutput;
   end;
 
 
