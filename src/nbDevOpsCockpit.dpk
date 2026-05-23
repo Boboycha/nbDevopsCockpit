@@ -26,13 +26,12 @@
 {$DEFINE DEBUG}
 {$ENDIF IMPLICITBUILDING}
 {$DESCRIPTION 'nb DevOps Cockpit - components for DevOps tooling (SSH, GitLab, etc.)'}
-{$DESIGNONLY}
+{$RUNONLY}
 {$IMPLICITBUILD ON}
 
 requires
   rtl,
   fmx,
-  DesignIDE,
   Skia.Package.RTL,
   Skia.Package.FMX;
 
@@ -54,8 +53,7 @@ contains
   nbSFTPClient in 'nbSFTPClient.pas',
   nbSFTPTransfer in 'nbSFTPTransfer.pas',
   nbFilePane in 'nbFilePane.pas',
-  GoghThemeLoader in 'GoghThemeLoader.pas',
-  Reg_nbDevOpsCockpit in 'Reg_nbDevOpsCockpit.pas';
+  GoghThemeLoader in 'GoghThemeLoader.pas';
 
 (*По мере роста добавлять сюда новые юниты:
      - GitLab.Client

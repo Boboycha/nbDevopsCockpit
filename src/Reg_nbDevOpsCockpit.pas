@@ -3,8 +3,8 @@ unit Reg_nbDevOpsCockpit;
 (*
   Регистрация компонентов пакета nbDevOpsCockpit в палитре Delphi.
 
-  Пакет содержит компоненты для построения DevOps-инструментов
-  на базе FMX (Windows / Linux / macOS).
+  Runtime-юниты живут в nbDevOpsCockpit, а этот юнит подключается только
+  design-time пакетом dclnbDevOpsCockpit.
 
   Текущие компоненты:
     TnbSSHClient       - SSH-соединение через libssh2
@@ -13,7 +13,7 @@ unit Reg_nbDevOpsCockpit;
   Запланировано добавить:
     TnbGitLabClient    - REST-клиент для GitLab API
     TnbServerInventory - инвентарь серверов с привязкой к проектам
-    TnbSnippetRunner   - выполнение скриптов на удалённых серверах
+    TnbSnippetRunner   - выполнение скриптов на удаленных серверах
     ...
 
   Палитра: "nb DevOps"

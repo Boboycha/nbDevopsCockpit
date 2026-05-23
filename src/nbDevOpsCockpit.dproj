@@ -115,11 +115,13 @@
         <GenPackage>true</GenPackage>
         <SanitizedProjectName>nbDevOpsCockpit</SanitizedProjectName>
         <DCC_Description>nb DevOps Cockpit - components for DevOps tooling (SSH, GitLab, etc.)</DCC_Description>
-        <DesignOnlyPackage>true</DesignOnlyPackage>
+        <RuntimeOnlyPackage>true</RuntimeOnlyPackage>
+        <DesignOnlyPackage>false</DesignOnlyPackage>
         <VerInfo_Locale>1049</VerInfo_Locale>
         <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductName=;ProductVersion=1.0.0.0;Comments=;CFBundleName=</VerInfo_Keys>
         <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;REST.Authenticator.OAuth.WebForm;Winapi;$(DCC_Namespace)</DCC_Namespace>
         <DCC_DcpOutput>..\bin\$(Platform)\$(Config)</DCC_DcpOutput>
+        <DCC_BplOutput>..\bin\$(Platform)\$(Config)</DCC_BplOutput>
         <DCC_DcuOutput>..\dcu\$(Platform)\$(Config)</DCC_DcuOutput>
         <DCC_UnitSearchPath>Z:\VCL\synapse;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
     </PropertyGroup>
@@ -203,7 +205,6 @@
         </DelphiCompile>
         <DCCReference Include="rtl.dcp"/>
         <DCCReference Include="fmx.dcp"/>
-        <DCCReference Include="DesignIDE.dcp"/>
         <DCCReference Include="Skia.Package.RTL.dcp"/>
         <DCCReference Include="Skia.Package.FMX.dcp"/>
         <DCCReference Include="nbSSH.LibSSH2.pas"/>
@@ -224,7 +225,6 @@
         <DCCReference Include="nbSFTPTransfer.pas"/>
         <DCCReference Include="nbFilePane.pas"/>
         <DCCReference Include="GoghThemeLoader.pas"/>
-        <DCCReference Include="Reg_nbDevOpsCockpit.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
