@@ -47,6 +47,14 @@ class function TTerminalInput.TranslateKey(Key: Word; KeyChar: WideChar;
       Result := #27 + 'O' + FinalChar;
   end;
 
+  function CSIKey(const FinalChar: Char): string;
+  begin
+    if HasKeyModifier then
+      Result := Format(#27'[1;%d%s', [ModifierParam, string(FinalChar)])
+    else
+      Result := #27 + '[' + FinalChar;
+  end;
+
   function TildeKey(const Code: Integer): string;
   begin
     if HasKeyModifier then
@@ -73,24 +81,33 @@ begin
   case Key of
     vkReturn: Result := #13;
     vkBack: Result := #127;
-    vkTab: Result := #9;
+    vkTab:
+      if ssShift in Shift then Result := #27 + '[Z' else Result := #9;
     vkEscape: Result := #27;
 
     vkUp:
-      if AppCursorKeys then Result := #27 + 'OA' else Result := #27 + '[A';
+      if HasKeyModifier then Result := CSIKey('A')
+      else if AppCursorKeys then Result := #27 + 'OA'
+      else Result := #27 + '[A';
     vkDown:
-      if AppCursorKeys then Result := #27 + 'OB' else Result := #27 + '[B';
+      if HasKeyModifier then Result := CSIKey('B')
+      else if AppCursorKeys then Result := #27 + 'OB'
+      else Result := #27 + '[B';
     vkRight:
-      if AppCursorKeys then Result := #27 + 'OC' else Result := #27 + '[C';
+      if HasKeyModifier then Result := CSIKey('C')
+      else if AppCursorKeys then Result := #27 + 'OC'
+      else Result := #27 + '[C';
     vkLeft:
-      if AppCursorKeys then Result := #27 + 'OD' else Result := #27 + '[D';
+      if HasKeyModifier then Result := CSIKey('D')
+      else if AppCursorKeys then Result := #27 + 'OD'
+      else Result := #27 + '[D';
 
-    vkHome: Result := #27 + '[H';
-    vkEnd: Result := #27 + '[F';
-    vkInsert: Result := #27 + '[2~';
-    vkDelete: Result := #27 + '[3~';
-    vkPrior: Result := #27 + '[5~';
-    vkNext: Result := #27 + '[6~';
+    vkHome: Result := CSIKey('H');
+    vkEnd: Result := CSIKey('F');
+    vkInsert: Result := TildeKey(2);
+    vkDelete: Result := TildeKey(3);
+    vkPrior: Result := TildeKey(5);
+    vkNext: Result := TildeKey(6);
 
     vkF1: Result := SS3Key('P');
     vkF2: Result := SS3Key('Q');
