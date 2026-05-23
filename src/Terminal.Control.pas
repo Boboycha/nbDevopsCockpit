@@ -8,13 +8,12 @@ uses
   FMX.Types, FMX.Controls, FMX.Graphics, FMX.Dialogs,
   FMX.Skia, Skia, FMX.Consts, FMX.Platform,
   Terminal.Types, Terminal.Buffer, Terminal.AnsiParser, Terminal.Renderer,
-  Terminal.Theme,ModernSSHClient, GoghThemeLoader;
+  Terminal.Theme, Terminal.Input, Terminal.SSHBridge, ModernSSHClient,
+  GoghThemeLoader;
 
 type
   TTerminalDataEvent = procedure(const S: string) of object;
   TTerminalHostOutputEvent = procedure(var S: string) of object;
-
-  TMouseButtonState = (mbsDown, mbsUp, mbsMove);
 
   TSyntaxRule = record
     Keyword: string;
@@ -44,12 +43,15 @@ type
     FSelectionStartAbs: TPoint;
     FAutoCopySelection: Boolean;
     FPasteOnRightClick: Boolean;
-    FSSHClient: TnbSSHClient;
+    FSSHBridge: TTerminalSSHBridge;
+    FLastHostCols: Integer;
+    FLastHostRows: Integer;
 
+    function GetSSHClient: TnbSSHClient;
     procedure SetSSHClient(const Value: TnbSSHClient);
-    procedure HandleSSHStatusChange(Sender: TObject; Status: TSSHStatus);
+    procedure HandleSSHConnected(Sender: TObject);
+    procedure HandleSSHError(Sender: TObject; const ErrorMessage: string);
     procedure HandleSSHReadData(Sender: TObject; const Data: string);
-    procedure HandleOwnDataOutput(const S: string);
     procedure HandleOwnResize(Sender: TObject);
     procedure HandleBufferResponse(const S: string);
 
@@ -69,8 +71,9 @@ type
     function GetTheme: TTerminalTheme;
     procedure SetTheme(const Value: TTerminalTheme);
 
-    function TranslateKey(Key: Word; KeyChar: WideChar; Shift: TShiftState): string;
-
+    procedure UpdateTerminalSize(NotifyHost: Boolean);
+    procedure ApplyTerminalSize(NewCols, NewRows: Integer;
+      NotifyHost: Boolean);
     procedure SendMouseReport(AButton, ACol, ARow: Integer; AShift: TShiftState;
       AState: TMouseButtonState);
 
@@ -132,7 +135,7 @@ protected
     property FontBold: Boolean read GetFontBold write SetFontBold;
     property FontItalic: Boolean read GetFontItalic write SetFontItalic;
     property Theme: TTerminalTheme read GetTheme write SetTheme;
-    property SSHClient: TnbSSHClient read FSSHClient write SetSSHClient;
+    property SSHClient: TnbSSHClient read GetSSHClient write SetSSHClient;
   end;
 
 
@@ -172,6 +175,13 @@ begin
   FIsSelecting := False;
   FAutoCopySelection := True;
   FPasteOnRightClick := True;
+  FLastHostCols := 0;
+  FLastHostRows := 0;
+
+  FSSHBridge := TTerminalSSHBridge.Create(Self);
+  FSSHBridge.OnConnected := HandleSSHConnected;
+  FSSHBridge.OnError := HandleSSHError;
+  FSSHBridge.OnReadData := HandleSSHReadData;
 
   TabStop := False;
   CanFocus := True;
@@ -187,6 +197,7 @@ begin
   FRenderTimer.Free;
   FTheme.Free;
   FCursorTimer.Free;
+  FSSHBridge.Free;
   FRenderer.Free;
   FParser.Free;
   FBuffer.Free;
@@ -311,55 +322,70 @@ end;
 procedure TnbTerminalControl.Draw(const Canvas: ISkCanvas; const Dest: TRectF; const Opacity: Single);
 var
   ScreenSvc: IFMXScreenService;
-  DPIScale, OldScale: Single;
-  NewCols, NewRows: Integer;
+  DPIScale: Single;
 begin
   inherited;
   DPIScale := 1.0;
   if TPlatformServices.Current.SupportsPlatformService(IFMXScreenService, ScreenSvc) then
     DPIScale := ScreenSvc.GetScreenScale;
 
-  OldScale := FRenderer.Scale;
   FRenderer.Scale := DPIScale;
-  if not SameValue(OldScale, DPIScale, 0.001) then
-  begin
-    if (FRenderer.CharWidth > 0) and (FRenderer.CharHeight > 0) then
-    begin
-      NewCols := Trunc(Width / FRenderer.CharWidth);
-      NewRows := Trunc(Height / FRenderer.CharHeight);
-      if (NewCols > 0) and (NewRows > 0) and
-        ((NewCols <> FBuffer.Width) or (NewRows <> FBuffer.Height)) then
-        FBuffer.Resize(NewCols, NewRows);
-    end;
-  end;
+  UpdateTerminalSize(True);
 
   FRenderer.Render(Canvas, Dest);
 end;
 
 procedure TnbTerminalControl.Resize;
-var
-  NewCols, NewRows: Integer;
 begin
   inherited;
 
+  UpdateTerminalSize(True);
+
+  Redraw;
+  FNeedRedraw := False;
+end;
+
+procedure TnbTerminalControl.UpdateTerminalSize(NotifyHost: Boolean);
+var
+  NewCols, NewRows: Integer;
+begin
+  if not Assigned(FRenderer) or not Assigned(FBuffer) then
+    Exit;
+
   FRenderer.MeasureChar;
 
-  if (FRenderer.CharWidth = 0) or (FRenderer.CharHeight = 0) then Exit;
+  if (FRenderer.CharWidth = 0) or (FRenderer.CharHeight = 0) then
+    Exit;
 
   NewCols := Trunc(Width / FRenderer.CharWidth);
   NewRows := Trunc(Height / FRenderer.CharHeight);
 
-  if (NewCols > 0) and (NewRows > 0) then
+  ApplyTerminalSize(NewCols, NewRows, NotifyHost);
+end;
+
+procedure TnbTerminalControl.ApplyTerminalSize(NewCols, NewRows: Integer;
+  NotifyHost: Boolean);
+var
+  SizeChanged: Boolean;
+begin
+  if (NewCols <= 0) or (NewRows <= 0) then
+    Exit;
+
+  SizeChanged := (NewCols <> FBuffer.Width) or (NewRows <> FBuffer.Height);
+
+  if SizeChanged then
   begin
-    if (NewCols <> FBuffer.Width) or (NewRows <> FBuffer.Height) then
-    begin
-      FBuffer.Resize(NewCols, NewRows);
-      FNeedRedraw := True;
-    end;
+    FBuffer.Resize(NewCols, NewRows);
+    FNeedRedraw := True;
   end;
 
-  Redraw;
-  FNeedRedraw := False;
+  if NotifyHost and Assigned(FSSHBridge) and
+    ((NewCols <> FLastHostCols) or (NewRows <> FLastHostRows)) then
+  begin
+    FSSHBridge.ResizePTY(NewCols, NewRows);
+    FLastHostCols := NewCols;
+    FLastHostRows := NewRows;
+  end;
 end;
 
 procedure TnbTerminalControl.AddSyntaxRule(const Keyword, AnsiColor: string; IgnoreCase: Boolean);
@@ -425,68 +451,6 @@ begin
   FBuffer.Clear;
   FParser.Reset;
   FNeedRedraw := True;
-end;
-
-function TnbTerminalControl.TranslateKey(Key: Word; KeyChar: WideChar;
-  Shift: TShiftState): string;
-begin
-  Result := '';
-
-  // Ctrl + буква -> Control code
-  if (ssCtrl in Shift) and (Key >= ord('A')) and (Key <= ord('Z')) then
-  begin
-    Result := string(Char(Key - ord('A') + 1));
-    Exit;
-  end;
-
-  // Alt + буква -> Escape + буква
-  if (ssAlt in Shift) and (KeyChar <> #0) then
-  begin
-    Result := #27 + string(KeyChar);
-    Exit;
-  end;
-
-  case Key of
-    vkReturn: Result := #13;
-    vkBack: Result := #127;
-    vkTab: Result := #9;
-    vkEscape: Result := #27;
-
-    vkUp:
-      if FBuffer.AppCursorKeys then Result := #27 + 'OA' else Result := #27 + '[A';
-    vkDown:
-      if FBuffer.AppCursorKeys then Result := #27 + 'OB' else Result := #27 + '[B';
-    vkRight:
-      if FBuffer.AppCursorKeys then Result := #27 + 'OC' else Result := #27 + '[C';
-    vkLeft:
-      if FBuffer.AppCursorKeys then Result := #27 + 'OD' else Result := #27 + '[D';
-
-    vkHome: Result := #27 + '[H';
-    vkEnd: Result := #27 + '[F';
-    vkInsert: Result := #27 + '[2~';
-    vkDelete: Result := #27 + '[3~';
-    vkPrior: Result := #27 + '[5~';
-    vkNext: Result := #27 + '[6~';
-
-    vkF1: Result := #27 + 'OP';
-    vkF2: Result := #27 + 'OQ';
-    vkF3: Result := #27 + 'OR';
-    vkF4: Result := #27 + 'OS';
-    vkF5: Result := #27 + '[15~';
-    vkF6: Result := #27 + '[17~';
-    vkF7: Result := #27 + '[18~';
-    vkF8: Result := #27 + '[19~';
-    vkF9: Result := #27 + '[20~';
-    vkF10: Result := #27 + '[21~';
-    vkF11: Result := #27 + '[23~';
-    vkF12: Result := #27 + '[24~';
-
-  else
-    if (KeyChar <> #0) and (Ord(KeyChar) >= 32) then
-    begin
-      Result := string(KeyChar);
-    end;
-  end;
 end;
 
 procedure TnbTerminalControl.CopyToClipboard;
@@ -574,7 +538,7 @@ begin
 
   ResetViewportToBottom;
 
-  S := TranslateKey(Key, KeyChar, Shift);
+  S := TTerminalInput.TranslateKey(Key, KeyChar, Shift, FBuffer.AppCursorKeys);
   if (S <> '') and Assigned(FOnData) then
   begin
     FOnData(S);
@@ -590,55 +554,12 @@ procedure TnbTerminalControl.SendMouseReport(AButton, ACol, ARow: Integer;
   AShift: TShiftState; AState: TMouseButtonState);
 var
   S: string;
-  Cb, Cx, Cy, ShiftMod: Integer;
 begin
-  S := '';
-  ShiftMod := 0;
-  if ssShift in AShift then Inc(ShiftMod, 4);
-  if ssAlt in AShift then Inc(ShiftMod, 8);
-  if ssCtrl in AShift then Inc(ShiftMod, 16);
-
-  if mtm1006_SGR in FBuffer.MouseModes then
-  begin
-    Cb := AButton + ShiftMod;
-    case AState of
-      mbsDown:
-        S := Format(#27'[<%d;%d;%dM', [Cb, ACol, ARow]);
-      mbsUp:
-        S := Format(#27'[<%d;%d;%dm', [Cb, ACol, ARow]);
-      mbsMove:
-        if mtm1003_Any in FBuffer.MouseModes then
-          S := Format(#27'[<%d;%d;%dM', [Cb, ACol, ARow]);
-    end;
-  end
-  else if (mtm1000_Click in FBuffer.MouseModes) or
-     (mtm1002_Wheel in FBuffer.MouseModes) or
-     (mtm1003_Any in FBuffer.MouseModes) then
-  begin
-    if (AButton = 64) and (mtm1002_Wheel in FBuffer.MouseModes) then
-      Cb := 64
-    else if (AButton = 65) and (mtm1002_Wheel in FBuffer.MouseModes) then
-      Cb := 65
-    else if (AState = mbsMove) and (mtm1003_Any in FBuffer.MouseModes) then
-      Cb := AButton + 32
-    else if AState = mbsUp then
-      Cb := 3
-    else if AState = mbsDown then
-      Cb := AButton
-    else
-      Exit;
-
-    Cb := Cb + ShiftMod;
-    Cx := Min(Max(1, ACol), 255 - 32) + 32;
-    Cy := Min(Max(1, ARow), 255 - 32) + 32;
-
-    S := #27'[' + 'M' + Char(Cb + 32) + Char(Cx) + Char(Cy);
-  end;
+  S := TTerminalInput.BuildMouseReport(AButton, ACol, ARow, AShift,
+    AState, FBuffer.MouseModes);
 
   if (S <> '') and Assigned(FOnData) then
-  begin
     FOnData(S);
-  end;
 end;
 
 procedure TnbTerminalControl.MouseDown(Button: TMouseButton; Shift: TShiftState;
@@ -855,33 +776,28 @@ begin
   Handled := True;
 end;
 
+function TnbTerminalControl.GetSSHClient: TnbSSHClient;
+begin
+  if Assigned(FSSHBridge) then
+    Result := FSSHBridge.Client
+  else
+    Result := nil;
+end;
+
 procedure TnbTerminalControl.SetSSHClient(const Value: TnbSSHClient);
 begin
-  if FSSHClient = Value then Exit;
+  if GetSSHClient = Value then Exit;
 
-  (* Отписываемся от старого клиента *)
-  if Assigned(FSSHClient) then
+  FSSHBridge.Client := Value;
+
+  if Assigned(Value) then
   begin
-    if not (csDestroying in FSSHClient.ComponentState) then
-    begin
-      FSSHClient.OnStatusChange := nil;
-      FSSHClient.OnReadData := nil;
-    end;
-    FSSHClient.RemoveFreeNotification(Self);
-  end;
-
-  FSSHClient := Value;
-
-  (* Подписываемся на нового клиента *)
-  if Assigned(FSSHClient) then
-  begin
-    FSSHClient.FreeNotification(Self);
-    FSSHClient.OnStatusChange := HandleSSHStatusChange;
-    FSSHClient.OnReadData := HandleSSHReadData;
-
     (* Подписываем терминал на свои собственные события - чтобы пробрасывать в SSH *)
-    OnData := HandleOwnDataOutput;
+    OnData := FSSHBridge.SendTerminalData;
     OnResized := HandleOwnResize;
+    FLastHostCols := 0;
+    FLastHostRows := 0;
+    UpdateTerminalSize(True);
   end
   else
   begin
@@ -895,31 +811,27 @@ procedure TnbTerminalControl.Notification(AComponent: TComponent;
   Operation: TOperation);
 begin
   inherited Notification(AComponent, Operation);
-  if (Operation = opRemove) and (AComponent = FSSHClient) then
-    FSSHClient := nil;
 end;
 
-procedure TnbTerminalControl.HandleSSHStatusChange(Sender: TObject;
-  Status: TSSHStatus);
+procedure TnbTerminalControl.HandleSSHConnected(Sender: TObject);
 begin
-  case Status of
-    ssConnected:
-      begin
-        SetFocus;
-        (* Передаём актуальный размер - на случай если форма успела
-           отресайзиться пока шёл коннект *)
-        if Assigned(FSSHClient) then
-          FSSHClient.ResizePTY(Cols, Rows);
-      end;
-    ssError:
-      begin
-        (* Пишем сообщение об ошибке прямо в терминал, красным *)
-        if Assigned(FSSHClient) and (FSSHClient.ErrorMessage <> '') then
-          WriteText(#13#10 + #27'[1;31m' +
-            'SSH error: ' + FSSHClient.ErrorMessage +
-            #27'[0m'#13#10);
-      end;
-  end;
+  SetFocus;
+  (* Передаём актуальный размер - на случай если форма успела
+     отресайзиться пока шёл коннект *)
+  UpdateTerminalSize(True);
+  FSSHBridge.ResizePTY(Cols, Rows);
+  FLastHostCols := Cols;
+  FLastHostRows := Rows;
+end;
+
+procedure TnbTerminalControl.HandleSSHError(Sender: TObject;
+  const ErrorMessage: string);
+begin
+  (* Пишем сообщение об ошибке прямо в терминал, красным *)
+  if ErrorMessage <> '' then
+    WriteText(#13#10 + #27'[1;31m' +
+      'SSH error: ' + ErrorMessage +
+      #27'[0m'#13#10);
 end;
 
 procedure TnbTerminalControl.HandleSSHReadData(Sender: TObject; const Data: string);
@@ -933,16 +845,9 @@ begin
     WriteText(Filtered);
 end;
 
-procedure TnbTerminalControl.HandleOwnDataOutput(const S: string);
-begin
-  if Assigned(FSSHClient) and (FSSHClient.Status = ssConnected) then
-    FSSHClient.WriteString(S);
-end;
-
 procedure TnbTerminalControl.HandleOwnResize(Sender: TObject);
 begin
-  if Assigned(FSSHClient) then
-    FSSHClient.ResizePTY(Cols, Rows);
+  FSSHBridge.ResizePTY(Cols, Rows);
 end;
 
 procedure TnbTerminalControl.HandleBufferResponse(const S: string);
@@ -975,10 +880,10 @@ begin
 
     (* Триггерим SIGWINCH чтобы mc/htop/vim перерисовались с новой темой.
        Если SSH не подключён - просто пропускаем. *)
-    if Assigned(FSSHClient) and (FSSHClient.Status = ssConnected) then
+    if FSSHBridge.Connected then
     begin
-      FSSHClient.ResizePTY(Cols, Rows + 1);
-      FSSHClient.ResizePTY(Cols, Rows);
+      FSSHBridge.ResizePTY(Cols, Rows + 1);
+      FSSHBridge.ResizePTY(Cols, Rows);
     end;
   finally
     NewTheme.Free;
@@ -1003,10 +908,10 @@ begin
     (* TTerminalTheme в конструкторе уже выставляет дефолтные цвета *)
     Self.Theme := DefaultTheme;
 
-    if Assigned(FSSHClient) and (FSSHClient.Status = ssConnected) then
+    if FSSHBridge.Connected then
     begin
-      FSSHClient.ResizePTY(Cols, Rows + 1);
-      FSSHClient.ResizePTY(Cols, Rows);
+      FSSHBridge.ResizePTY(Cols, Rows + 1);
+      FSSHBridge.ResizePTY(Cols, Rows);
     end;
   finally
     DefaultTheme.Free;

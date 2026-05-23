@@ -45,6 +45,8 @@ contains
   Terminal.Buffer in 'Terminal.Buffer.pas',
   Terminal.AnsiParser in 'Terminal.AnsiParser.pas',
   Terminal.Renderer in 'Terminal.Renderer.pas',
+  Terminal.Input in 'Terminal.Input.pas',
+  Terminal.SSHBridge in 'Terminal.SSHBridge.pas',
   Terminal.Control in 'Terminal.Control.pas',
   nbFileSources in 'nbFileSources.pas',
   nbFilePane.Controls in 'nbFilePane.Controls.pas',
