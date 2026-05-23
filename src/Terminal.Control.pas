@@ -3,13 +3,14 @@
 interface
 
 uses
-  System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
-  System.Math, System.Generics.Collections,
+  System.SysUtils, System.Types, System.UITypes, System.Classes,
+  System.Math, System.Generics.Collections, System.Diagnostics,
+  System.Character,
   FMX.Types, FMX.Controls, FMX.Graphics, FMX.Dialogs,
   FMX.Skia, Skia, FMX.Consts, FMX.Platform,
   Terminal.Types, Terminal.Buffer, Terminal.AnsiParser, Terminal.Renderer,
-  Terminal.Theme, Terminal.Input, Terminal.SSHBridge, ModernSSHClient,
-  GoghThemeLoader;
+  Terminal.Theme, Terminal.Input, Terminal.Clipboard, Terminal.SSHBridge,
+  ModernSSHClient, GoghThemeLoader;
 
 type
   TTerminalDataEvent = procedure(const S: string) of object;
@@ -41,6 +42,11 @@ type
     // Для выделения
     FIsSelecting: Boolean;
     FSelectionStartAbs: TPoint;
+    FClearSelectionOnNextAction: Boolean;
+    FSelectionProtectedUntilTick: Int64;
+    FSuppressNextRightMouseUp: Boolean;
+    FLastClickTick: Int64;
+    FLastClickPoint: TPointF;
     FAutoCopySelection: Boolean;
     FPasteOnRightClick: Boolean;
     FSSHBridge: TTerminalSSHBridge;
@@ -78,6 +84,10 @@ type
       AState: TMouseButtonState);
 
     function ApplyHighlighting(const Input: string): string;
+    function TrySelectWordAt(Col, Row: Integer): Boolean;
+    function IsSelectionProtected: Boolean;
+    procedure ProtectSelection;
+    procedure ClearSelectionOnTerminalAction;
     procedure ResetViewportToBottom;
 
     // Буфер обмена
@@ -141,9 +151,8 @@ protected
 
 implementation
 
-uses
-  System.Rtti;
-
+const
+  SelectionProtectionMs = 250;
 
 { TnbTerminalControl }
 
@@ -173,6 +182,11 @@ begin
   FEnableSyntaxHighlighting := False;
 
   FIsSelecting := False;
+  FClearSelectionOnNextAction := False;
+  FSelectionProtectedUntilTick := 0;
+  FSuppressNextRightMouseUp := False;
+  FLastClickTick := 0;
+  FLastClickPoint := TPointF.Zero;
   FAutoCopySelection := True;
   FPasteOnRightClick := True;
   FLastHostCols := 0;
@@ -446,7 +460,7 @@ begin
   end;
 end;
 
-  procedure TnbTerminalControl.Clear;
+procedure TnbTerminalControl.Clear;
 begin
   FBuffer.Clear;
   FParser.Reset;
@@ -455,17 +469,88 @@ end;
 
 procedure TnbTerminalControl.CopyToClipboard;
 var
-  ClipboardService: IFMXClipboardService;
   Text: string;
 begin
   if not FBuffer.HasSelection then Exit;
 
-  if TPlatformServices.Current.SupportsPlatformService(IFMXClipboardService, ClipboardService) then
+  Text := FBuffer.GetSelectedText;
+  if TTerminalClipboard.CopyText(Text) then
+    FClearSelectionOnNextAction := True;
+end;
+
+procedure TnbTerminalControl.ClearSelectionOnTerminalAction;
+begin
+  if IsSelectionProtected then
+    Exit;
+
+  if FClearSelectionOnNextAction and FBuffer.HasSelection then
   begin
-    Text := FBuffer.GetSelectedText;
-    if Text <> '' then
-      ClipboardService.SetClipboard(Text);
+    FBuffer.ClearSelection;
+    FNeedRedraw := True;
   end;
+  FClearSelectionOnNextAction := False;
+end;
+
+function TnbTerminalControl.IsSelectionProtected: Boolean;
+begin
+  Result := (FSelectionProtectedUntilTick <> 0) and
+    (TStopwatch.GetTimeStamp < FSelectionProtectedUntilTick);
+  if not Result then
+    FSelectionProtectedUntilTick := 0;
+end;
+
+procedure TnbTerminalControl.ProtectSelection;
+begin
+  FSelectionProtectedUntilTick := TStopwatch.GetTimeStamp +
+    (TStopwatch.Frequency * SelectionProtectionMs div 1000);
+end;
+
+function TnbTerminalControl.TrySelectWordAt(Col, Row: Integer): Boolean;
+var
+  Line: TTerminalLine;
+  StartCol, EndCol, AbsY: Integer;
+
+  function IsWordChar(const S: string): Boolean;
+  var
+    C: Char;
+  begin
+    Result := False;
+    if S = '' then
+      Exit;
+
+    C := S[1];
+    Result := C.IsLetterOrDigit or CharInSet(C,
+      ['_', '-', '.', '/', '\', '~', ':', '@']);
+  end;
+
+begin
+  Result := False;
+
+  if (Col < 0) or (Row < 0) or (Row >= FBuffer.Height) then
+    Exit;
+
+  Line := FBuffer.GetRenderLine(Row);
+  if (Col >= Length(Line)) or not IsWordChar(Line[Col].Char) then
+    Exit;
+
+  StartCol := Col;
+  while (StartCol > 0) and IsWordChar(Line[StartCol - 1].Char) do
+    Dec(StartCol);
+
+  EndCol := Col;
+  while (EndCol + 1 < Length(Line)) and IsWordChar(Line[EndCol + 1].Char) do
+    Inc(EndCol);
+
+  AbsY := FBuffer.ScreenYToAbsolute(Row);
+  FSelectionStartAbs := TPoint.Create(StartCol, AbsY);
+  FBuffer.SetSelection(StartCol, AbsY, EndCol, AbsY);
+  FIsSelecting := False;
+  FClearSelectionOnNextAction := False;
+  if FAutoCopySelection then
+    CopyToClipboard;
+  ProtectSelection;
+  FNeedRedraw := True;
+  Result := True;
 end;
 
 procedure TnbTerminalControl.ResetViewportToBottom;
@@ -479,8 +564,6 @@ end;
 
 procedure TnbTerminalControl.PasteFromClipboard;
 var
-  ClipboardService: IFMXClipboardService;
-  Value: TValue;
   Text: string;
 begin
   ResetViewportToBottom;
@@ -488,24 +571,19 @@ begin
   if FBuffer.HasSelection then
   begin
     FBuffer.ClearSelection;
+    FClearSelectionOnNextAction := False;
     FNeedRedraw := True;
   end;
 
-  if TPlatformServices.Current.SupportsPlatformService(IFMXClipboardService, ClipboardService) then
+  if TTerminalClipboard.ReadText(Text) then
   begin
-    Value := ClipboardService.GetClipboard;
-    if not Value.IsEmpty then
+    if Assigned(FOnData) then
     begin
-      Text := Value.ToString;
-      if (Text <> '') and Assigned(FOnData) then
-      begin
-        // Bracketed Paste Mode
-        if FBuffer.BracketedPaste then
-          Text := #27'[200~' + Text + #27'[201~';
-        FOnData(Text);
-        if Assigned(FOnUserInput) then
-          FOnUserInput(Text);
-      end;
+      if FBuffer.BracketedPaste then
+        Text := TTerminalClipboard.WrapBracketedPaste(Text);
+      FOnData(Text);
+      if Assigned(FOnUserInput) then
+        FOnUserInput(Text);
     end;
   end;
 end;
@@ -536,11 +614,11 @@ begin
     Exit;
   end;
 
-  ResetViewportToBottom;
-
   S := TTerminalInput.TranslateKey(Key, KeyChar, Shift, FBuffer.AppCursorKeys);
   if (S <> '') and Assigned(FOnData) then
   begin
+    ClearSelectionOnTerminalAction;
+    ResetViewportToBottom;
     FOnData(S);
     if Assigned(FOnUserInput) then
       FOnUserInput(S);
@@ -568,6 +646,8 @@ var
   Col, Row, Cb, AbsY: Integer;
   IsMouseReporting: Boolean;
   OverrideSelection: Boolean;
+  ClickTick: Int64;
+  IsDoubleClick: Boolean;
 begin
   inherited;
   SetFocus;
@@ -582,11 +662,35 @@ begin
   Col := Trunc(X / FRenderer.CharWidth);
   Row := Trunc(Y / FRenderer.CharHeight);
 
+  ClickTick := TStopwatch.GetTimeStamp;
+  IsDoubleClick := (Button = TMouseButton.mbLeft) and
+    (FLastClickTick <> 0) and
+    ((ClickTick - FLastClickTick) * 1000 div TStopwatch.Frequency <= 500) and
+    (Abs(X - FLastClickPoint.X) <= 4) and
+    (Abs(Y - FLastClickPoint.Y) <= 4);
+
+  FLastClickTick := ClickTick;
+  FLastClickPoint := TPointF.Create(X, Y);
+
+  if not IsDoubleClick then
+    ClearSelectionOnTerminalAction;
+
   var RepCol := Col + 1;
   var RepRow := Row + 1;
 
   IsMouseReporting := FBuffer.MouseModes <> [];
   OverrideSelection := (ssShift in Shift);
+
+  if (Button = TMouseButton.mbRight) and FPasteOnRightClick then
+  begin
+    FSuppressNextRightMouseUp := True;
+    PasteFromClipboard;
+    Exit;
+  end;
+
+  if IsDoubleClick and ((not IsMouseReporting) or OverrideSelection) and
+    TrySelectWordAt(Col, Row) then
+    Exit;
 
   // Логика выделения и вставки
   if (not IsMouseReporting) or OverrideSelection then
@@ -595,13 +699,7 @@ begin
     begin
       AbsY := FBuffer.ScreenYToAbsolute(Row);
       FSelectionStartAbs := TPoint.Create(Col, AbsY);
-      FBuffer.SetSelection(Col, AbsY, Col, AbsY);
       FIsSelecting := True;
-      FNeedRedraw := True;
-    end
-    else if (Button = TMouseButton.mbRight) and FPasteOnRightClick then
-    begin
-      PasteFromClipboard;
     end;
     Exit;
   end;
@@ -626,12 +724,20 @@ var
   IsMouseReporting: Boolean;
   OverrideSelection: Boolean;
 begin
+  if (Button = TMouseButton.mbRight) and FSuppressNextRightMouseUp then
+  begin
+    FSuppressNextRightMouseUp := False;
+    Exit;
+  end;
+
   // Завершение выделения
   if FIsSelecting then
   begin
     FIsSelecting := False;
     if FAutoCopySelection and FBuffer.HasSelection then
       CopyToClipboard;
+    if FBuffer.HasSelection then
+      ProtectSelection;
     Exit;
   end;
 
@@ -683,8 +789,11 @@ begin
 
     AbsY := FBuffer.ScreenYToAbsolute(Row);
 
-    FBuffer.SetSelection(FSelectionStartAbs.X, FSelectionStartAbs.Y, Col, AbsY);
-    FNeedRedraw := True;
+    if (Col <> FSelectionStartAbs.X) or (AbsY <> FSelectionStartAbs.Y) then
+    begin
+      FBuffer.SetSelection(FSelectionStartAbs.X, FSelectionStartAbs.Y, Col, AbsY);
+      FNeedRedraw := True;
+    end;
     Exit;
   end;
 
@@ -702,14 +811,11 @@ begin
   if not ((mtm1003_Any in FBuffer.MouseModes) or
           ((mtm1006_SGR in FBuffer.MouseModes) and (Shift * [ssLeft, ssRight, ssMiddle] <> []))) then
   begin
-    if FBuffer.MouseModes <> [] then
-      Cursor := crHandPoint
-    else
-      Cursor := crIBeam;
+    Cursor := crIBeam;
     Exit;
   end;
 
-  Cursor := crHandPoint;
+  Cursor := crIBeam;
 
   if (RepCol = FBuffer.LastMouseCol) and (RepRow = FBuffer.LastMouseRow) then
     Exit;
@@ -745,6 +851,7 @@ begin
     if FBuffer.HasSelection then
     begin
       FBuffer.ClearSelection;
+      FClearSelectionOnNextAction := False;
       FNeedRedraw := True;
     end;
 

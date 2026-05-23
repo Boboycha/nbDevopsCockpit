@@ -161,6 +161,9 @@ begin
   FCursor.X := 0;
   FCursor.Y := 0;
   FCursor.Visible := True;
+  FSavedCursor := FCursor;
+  FSavedCursorMain := FCursor;
+  FSavedCursorAlt := FCursor;
   FCurrentAttributes := TCharAttributes.Default(FTheme);
   FLastChar := ' ';
 end;
@@ -1213,16 +1216,20 @@ begin
       end;
     
     apcSaveCursorPosition:
-      FSavedCursor := FCursor;
+      begin
+        FSavedCursor.X := FCursor.X;
+        FSavedCursor.Y := FCursor.Y;
+      end;
     
     apcRestoreCursorPosition:
-      FCursor := FSavedCursor;
+      begin
+        FCursor.X := FSavedCursor.X;
+        FCursor.Y := FSavedCursor.Y;
+      end;
     
     apcSetPrivateMode:
       begin
-        if Length(Cmd.Params) > 0 then
-        begin
-          N := Cmd.Params[0];
+        for N in Cmd.Params do
           case N of
             1: FAppCursorKeys := True;
             25: FCursor.Visible := True;
@@ -1233,14 +1240,11 @@ begin
             1049, 47, 1047: SwitchToAlternateBuffer;
             2004: FBracketedPaste := True;
           end;
-        end;
       end;
     
     apcResetPrivateMode:
       begin
-        if Length(Cmd.Params) > 0 then
-        begin
-          N := Cmd.Params[0];
+        for N in Cmd.Params do
           case N of
             1: FAppCursorKeys := False;
             25: FCursor.Visible := False;
@@ -1251,7 +1255,6 @@ begin
             1049, 47, 1047: SwitchToMainBuffer;
             2004: FBracketedPaste := False;
           end;
-        end;
       end;
     
     apcReverseIndex:

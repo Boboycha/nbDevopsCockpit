@@ -215,6 +215,7 @@
         <DCCReference Include="Terminal.AnsiParser.pas"/>
         <DCCReference Include="Terminal.Renderer.pas"/>
         <DCCReference Include="Terminal.Input.pas"/>
+        <DCCReference Include="Terminal.Clipboard.pas"/>
         <DCCReference Include="Terminal.SSHBridge.pas"/>
         <DCCReference Include="Terminal.Control.pas"/>
         <DCCReference Include="nbFileSources.pas"/>
