@@ -1,4 +1,4 @@
-unit nbFilePane.Controls;
+﻿unit nbFilePane.Controls;
 
 interface
 
@@ -20,14 +20,14 @@ const
   FILE_ICON_FOLDER     = #$E8B7;
   FILE_ICON_DOCUMENT   = #$E8A5;
 
-  FILE_ROW_HEIGHT      = 44;
-  FILE_HEADER_HEIGHT   = 36;
-  FILE_COL_DATE_WIDTH  = 150;
-  FILE_COL_SIZE_WIDTH  = 78;
+  FILE_ROW_HEIGHT      = 42;
+  FILE_HEADER_HEIGHT   = 34;
+  FILE_COL_DATE_WIDTH  = 104;
+  FILE_COL_SIZE_WIDTH  = 74;
   FILE_COL_KIND_WIDTH  = 92;
-  FILE_MUTED_TEXT      = TAlphaColor($FF8B98AA);
-  FILE_ICON_BLUE       = TAlphaColor($FF6EC8F2);
-  FILE_ROW_LINE        = TAlphaColor($222F3A4A);
+  FILE_MUTED_TEXT      = TAlphaColor($FF78949B);
+  FILE_ICON_BLUE       = TAlphaColor($FF29C7B7);
+  FILE_ROW_LINE        = TAlphaColor($1F2B4A51);
 
   FILE_SORT_NAME       = 0;
   FILE_SORT_DATE       = 1;
@@ -136,11 +136,11 @@ end;
 function FileHeaderBaseCaption(AColumn: Integer): string;
 begin
   case AColumn of
-    FILE_SORT_DATE: Result := 'Date Modified';
-    FILE_SORT_SIZE: Result := 'Size';
-    FILE_SORT_KIND: Result := 'Kind';
+    FILE_SORT_DATE: Result := 'ИЗМЕНЁН';
+    FILE_SORT_SIZE: Result := 'РАЗМЕР';
+    FILE_SORT_KIND: Result := 'ТИП';
   else
-    Result := 'Name';
+    Result := 'ИМЯ';
   end;
 end;
 
@@ -163,7 +163,7 @@ begin
   inherited;
   Align := TAlignLayout.Left;
   Width := 30;
-  Margins.Rect := RectF(0, 2, 4, 2);
+  Margins.Rect := RectF(0, 3, 6, 3);
   StyledSettings := StyledSettings - [TStyledSetting.Family,
     TStyledSetting.Size, TStyledSetting.FontColor];
   TextSettings.Font.Family := FILE_ICON_FONT;

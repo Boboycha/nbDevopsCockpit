@@ -56,7 +56,7 @@ type
     FSelectionColor: TAlphaColor;
     FButtons: TList<TnbToolButton>;
     FTransferButton: TnbToolButton;
-    FColBg, FColSurface, FColBorder, FColText: TAlphaColor;
+    FColBg, FColSurface, FColBorder, FColText, FColMuted: TAlphaColor;
     FOnTransfer: TNotifyEvent;
     FOnActivated: TNotifyEvent;
     FOnError: TnbFileErrorEvent;
@@ -164,6 +164,7 @@ begin
   FColSurface := TAlphaColor($FF1C2330);
   FColBorder  := TAlphaColor($FF344056);
   FColText    := TAlphaColor($FFCCD4DE);
+  FColMuted   := FILE_MUTED_TEXT;
   FSelectionColor := TAlphaColor($FF263246);
   CanFocus := True;
   TabStop := True;
@@ -299,13 +300,13 @@ procedure TnbFilePane.BuildUi;
     Caption := TLabel.Create(Cell);
     Caption.Parent := Cell;
     Caption.Align := TAlignLayout.Client;
-    Caption.Margins.Rect := RectF(10, 0, 8, 0);
+    Caption.Margins.Rect := RectF(12, 0, 8, 0);
     Caption.HitTest := False;
     Caption.Tag := AColumn;
     Caption.Text := FileHeaderCaption(AText, AColumn, FSortColumn, FSortDescending);
     Caption.StyledSettings := Caption.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size, TStyledSetting.Style];
-    Caption.TextSettings.FontColor := FColText;
-    Caption.TextSettings.Font.Size := 12;
+    Caption.TextSettings.FontColor := FColMuted;
+    Caption.TextSettings.Font.Size := 10;
     Caption.TextSettings.Font.Style := [TFontStyle.fsBold];
     Caption.TextSettings.VertAlign := TTextAlign.Center;
     Caption.TextSettings.HorzAlign := TTextAlign.Leading;
@@ -317,7 +318,8 @@ procedure TnbFilePane.BuildUi;
       Divider.Align := TAlignLayout.Left;
       Divider.Width := 1;
       Divider.HitTest := False;
-      Divider.Fill.Color := FColBorder;
+      Divider.StyleName := 'file-col-divider';
+      Divider.Fill.Color := TAlphaColor($18000000) or (FColBorder and $00FFFFFF);
       Divider.Stroke.Kind := TBrushKind.None;
     end;
   end;
@@ -328,8 +330,8 @@ begin
   FToolBar := TLayout.Create(Self);
   FToolBar.Parent := Self;
   FToolBar.Align := TAlignLayout.Top;
-  FToolBar.Height := 36;
-  FToolBar.Margins.Rect := RectF(4, 2, 4, 0);
+  FToolBar.Height := 34;
+  FToolBar.Margins.Rect := RectF(8, 4, 8, 0);
 
   AddButton(#$2191, HandleUp,      'Вверх');
   AddButton('R',    HandleRefresh, 'Обновить');
@@ -341,8 +343,8 @@ begin
   FPathEdit.Parent := Self;
   FPathEdit.Align := TAlignLayout.Top;
   FPathEdit.Position.Y := 100;
-  FPathEdit.Height := 28;
-  FPathEdit.Margins.Rect := RectF(4, 2, 4, 2);
+  FPathEdit.Height := 30;
+  FPathEdit.Margins.Rect := RectF(8, 2, 8, 4);
   FPathEdit.StyleLookup := 'editstyle';
   FPathEdit.ReadOnly := True;
   FPathEdit.TextSettings.HorzAlign := TTextAlign.Leading;
@@ -351,7 +353,7 @@ begin
   FListHost := TRectangle.Create(Self);
   FListHost.Parent := Self;
   FListHost.Align := TAlignLayout.Client;
-  FListHost.Margins.Rect := RectF(4, 0, 4, 4);
+  FListHost.Margins.Rect := RectF(8, 0, 8, 6);
   FListHost.ClipChildren := True;
   FListHost.HitTest := True;
   FListHost.Fill.Kind := TBrushKind.Solid;
@@ -359,8 +361,8 @@ begin
   FListHost.Stroke.Kind := TBrushKind.Solid;
   FListHost.Stroke.Color := FColBorder;
   FListHost.Stroke.Thickness := 1;
-  FListHost.XRadius := 3;
-  FListHost.YRadius := 3;
+  FListHost.XRadius := 6;
+  FListHost.YRadius := 6;
   FListHost.OnDragOver := HandleDragOver;
   FListHost.OnDragDrop := HandleDragDrop;
 
@@ -374,11 +376,11 @@ begin
   HeaderLine.Parent := FHeader;
   HeaderLine.Align := TAlignLayout.Bottom;
   HeaderLine.Height := 1;
+  HeaderLine.StyleName := 'file-header-line';
   HeaderLine.HitTest := False;
-  HeaderLine.Fill.Color := FColBorder;
+  HeaderLine.Fill.Color := TAlphaColor($30000000) or (FColBorder and $00FFFFFF);
   HeaderLine.Stroke.Kind := TBrushKind.None;
 
-  AddHeaderCell('Kind', TAlignLayout.Right, FILE_COL_KIND_WIDTH, FILE_SORT_KIND);
   AddHeaderCell('Size', TAlignLayout.Right, FILE_COL_SIZE_WIDTH, FILE_SORT_SIZE);
   AddHeaderCell('Date Modified', TAlignLayout.Right, FILE_COL_DATE_WIDTH, FILE_SORT_DATE);
   AddHeaderCell('Name', TAlignLayout.Client, 0, FILE_SORT_NAME);
@@ -546,7 +548,7 @@ var
   Entry: TnbFileEntry;
   RowBg, Line: TRectangle;
   Row, NameCell, TextStack: TLayout;
-  Icon, NameText, DetailText, DateText, SizeText, KindText: TLabel;
+  Icon, NameText, DetailText, DateText, SizeText: TLabel;
 begin
   FList.BeginUpdate;
   try
@@ -591,47 +593,34 @@ begin
       Row.Margins.Rect := RectF(0, 0, 0, 0);
       Row.HitTest := False;
 
-      KindText := TLabel.Create(Row);
-      KindText.Parent := Row;
-      KindText.Align := TAlignLayout.Right;
-      KindText.Width := FILE_COL_KIND_WIDTH;
-      KindText.Margins.Rect := RectF(8, 0, 10, 0);
-      KindText.HitTest := False;
-      KindText.Text := FileEntryKind(Entry);
-      KindText.StyledSettings := KindText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
-      KindText.TextSettings.FontColor := FILE_MUTED_TEXT;
-      KindText.TextSettings.Font.Size := 12;
-      KindText.TextSettings.VertAlign := TTextAlign.Center;
-      KindText.TextSettings.HorzAlign := TTextAlign.Leading;
-
       SizeText := TLabel.Create(Row);
       SizeText.Parent := Row;
       SizeText.Align := TAlignLayout.Right;
       SizeText.Width := FILE_COL_SIZE_WIDTH;
-      SizeText.Margins.Rect := RectF(8, 0, 8, 0);
+      SizeText.Margins.Rect := RectF(6, 0, 8, 0);
       SizeText.HitTest := False;
       if Entry.IsDir then
         SizeText.Text := '--'
       else
         SizeText.Text := FormatFileSize(Entry.Size);
       SizeText.StyledSettings := SizeText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
-      SizeText.TextSettings.FontColor := FILE_MUTED_TEXT;
-      SizeText.TextSettings.Font.Size := 12;
+      SizeText.TextSettings.FontColor := FColMuted;
+      SizeText.TextSettings.Font.Size := 11;
       SizeText.TextSettings.VertAlign := TTextAlign.Center;
-      SizeText.TextSettings.HorzAlign := TTextAlign.Leading;
+      SizeText.TextSettings.HorzAlign := TTextAlign.Trailing;
 
       DateText := TLabel.Create(Row);
       DateText.Parent := Row;
       DateText.Align := TAlignLayout.Right;
       DateText.Width := FILE_COL_DATE_WIDTH;
-      DateText.Margins.Rect := RectF(8, 0, 8, 0);
+      DateText.Margins.Rect := RectF(6, 0, 12, 0);
       DateText.HitTest := False;
       DateText.Text := FormatFileModified(Entry.Modified);
       DateText.StyledSettings := DateText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
-      DateText.TextSettings.FontColor := FILE_MUTED_TEXT;
-      DateText.TextSettings.Font.Size := 12;
+      DateText.TextSettings.FontColor := FColMuted;
+      DateText.TextSettings.Font.Size := 11;
       DateText.TextSettings.VertAlign := TTextAlign.Center;
-      DateText.TextSettings.HorzAlign := TTextAlign.Leading;
+      DateText.TextSettings.HorzAlign := TTextAlign.Trailing;
 
       NameCell := TLayout.Create(Row);
       NameCell.Parent := Row;
@@ -641,7 +630,7 @@ begin
       Icon := TLabel.Create(NameCell);
       Icon.Parent := NameCell;
       Icon.Align := TAlignLayout.Left;
-      Icon.Width := 34;
+      Icon.Width := 32;
       Icon.Margins.Rect := RectF(8, 0, 0, 0);
       Icon.HitTest := False;
       if Entry.IsDir then
@@ -650,7 +639,7 @@ begin
         Icon.Text := FILE_ICON_DOCUMENT;
       Icon.StyledSettings := Icon.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Family, TStyledSetting.Size];
       Icon.TextSettings.Font.Family := FILE_ICON_FONT;
-      Icon.TextSettings.Font.Size := 18;
+      Icon.TextSettings.Font.Size := 17;
       Icon.TextSettings.FontColor := FILE_ICON_BLUE;
       Icon.TextSettings.VertAlign := TTextAlign.Center;
       Icon.TextSettings.HorzAlign := TTextAlign.Center;
@@ -658,7 +647,7 @@ begin
       TextStack := TLayout.Create(NameCell);
       TextStack.Parent := NameCell;
       TextStack.Align := TAlignLayout.Client;
-      TextStack.Margins.Rect := RectF(0, 5, 8, 4);
+      TextStack.Margins.Rect := RectF(0, 4, 8, 3);
       TextStack.HitTest := False;
 
       NameText := TLabel.Create(TextStack);
@@ -680,8 +669,8 @@ begin
       DetailText.HitTest := False;
       DetailText.Text := FormatFilePermissions(Entry.Permissions, Entry.IsDir);
       DetailText.StyledSettings := DetailText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
-      DetailText.TextSettings.FontColor := FILE_MUTED_TEXT;
-      DetailText.TextSettings.Font.Size := 10;
+      DetailText.TextSettings.FontColor := FColMuted;
+      DetailText.TextSettings.Font.Size := 9;
       DetailText.TextSettings.VertAlign := TTextAlign.Leading;
       DetailText.TextSettings.HorzAlign := TTextAlign.Leading;
 
@@ -1087,16 +1076,21 @@ end;
 
 procedure TnbFilePane.ApplyColors(ABg, ASurface, ABorder, AText: TAlphaColor);
 var
-  I: Integer;
+  I, J: Integer;
+  Child, GrandChild: TFmxObject;
 begin
   FColBg := ABg;
   FColSurface := ASurface;
   FColBorder := ABorder;
   FColText := AText;
+  FColMuted := TAlphaColor($FF000000)
+    or ((Round(((AText shr 16) and $FF) * 0.58 + ((ABg shr 16) and $FF) * 0.42) and $FF) shl 16)
+    or ((Round(((AText shr 8) and $FF) * 0.58 + ((ABg shr 8) and $FF) * 0.42) and $FF) shl 8)
+    or (Round((AText and $FF) * 0.58 + (ABg and $FF) * 0.42) and $FF);
   FSelectionColor := TAlphaColor($FF000000)
-    or ((Round(((ASurface shr 16) and $FF) * 0.70 + ((AText shr 16) and $FF) * 0.30) and $FF) shl 16)
-    or ((Round(((ASurface shr 8) and $FF) * 0.70 + ((AText shr 8) and $FF) * 0.30) and $FF) shl 8)
-    or (Round((ASurface and $FF) * 0.70 + (AText and $FF) * 0.30) and $FF);
+    or ((Round(((ASurface shr 16) and $FF) * 0.82 + ((FILE_ICON_BLUE shr 16) and $FF) * 0.18) and $FF) shl 16)
+    or ((Round(((ASurface shr 8) and $FF) * 0.82 + ((FILE_ICON_BLUE shr 8) and $FF) * 0.18) and $FF) shl 8)
+    or (Round((ASurface and $FF) * 0.82 + (FILE_ICON_BLUE and $FF) * 0.18) and $FF);
   for I := 0 to FButtons.Count - 1 do
     FButtons[I].SetGlyphColor(AText);
   if FPathEdit <> nil then
@@ -1113,6 +1107,24 @@ begin
     FListHost.Stroke.Color := ABorder;
     FListHost.Stroke.Thickness := 1;
   end;
+  if FHeader <> nil then
+    for I := 0 to FHeader.ChildrenCount - 1 do
+    begin
+      Child := FHeader.Children[I];
+      if (Child is TRectangle) and SameText(Child.StyleName, 'file-header-line') then
+        TRectangle(Child).Fill.Color := TAlphaColor($30000000) or
+          (ABorder and $00FFFFFF);
+      for J := 0 to Child.ChildrenCount - 1 do
+      begin
+        GrandChild := Child.Children[J];
+        if GrandChild is TLabel then
+          TLabel(GrandChild).TextSettings.FontColor := FColMuted
+        else if (GrandChild is TRectangle)
+          and SameText(GrandChild.StyleName, 'file-col-divider') then
+          TRectangle(GrandChild).Fill.Color := TAlphaColor($18000000) or
+            (ABorder and $00FFFFFF);
+      end;
+    end;
   FillList;
   UpdateRowSelection;
 end;
