@@ -148,6 +148,14 @@ uses
 type
   TControlAccess = class(TControl);
 
+procedure MarkInternalControl(AObject: TFmxObject);
+begin
+  if AObject = nil then Exit;
+  AObject.Stored := False;
+  if AObject is TControl then
+    TControl(AObject).Locked := True;
+end;
+
 { TnbFilePane }
 
 constructor TnbFilePane.Create(AOwner: TComponent);
@@ -266,6 +274,7 @@ function TnbFilePane.AddButton(const AGlyph: string; AOnClick: TNotifyEvent;
   const AHint: string): TnbToolButton;
 begin
   Result := TnbToolButton.Create(Self);
+  MarkInternalControl(Result);
   Result.Parent := FToolBar;
   Result.Glyph := FileToolIconFor(AGlyph, AHint);
   Result.SetGlyphColor(FColText);
@@ -288,6 +297,7 @@ procedure TnbFilePane.BuildUi;
     Divider: TRectangle;
   begin
     Cell := TLayout.Create(FHeader);
+    MarkInternalControl(Cell);
     Cell.Parent := FHeader;
     Cell.Align := AAlign;
     if AWidth > 0 then
@@ -298,6 +308,7 @@ procedure TnbFilePane.BuildUi;
     Cell.Cursor := crHandPoint;
 
     Caption := TLabel.Create(Cell);
+    MarkInternalControl(Caption);
     Caption.Parent := Cell;
     Caption.Align := TAlignLayout.Client;
     Caption.Margins.Rect := RectF(12, 0, 8, 0);
@@ -314,6 +325,7 @@ procedure TnbFilePane.BuildUi;
     if AAlign <> TAlignLayout.Client then
     begin
       Divider := TRectangle.Create(Cell);
+      MarkInternalControl(Divider);
       Divider.Parent := Cell;
       Divider.Align := TAlignLayout.Left;
       Divider.Width := 1;
@@ -328,6 +340,7 @@ var
   HeaderLine: TRectangle;
 begin
   FToolBar := TLayout.Create(Self);
+  MarkInternalControl(FToolBar);
   FToolBar.Parent := Self;
   FToolBar.Align := TAlignLayout.Top;
   FToolBar.Height := 34;
@@ -340,6 +353,7 @@ begin
   AddButton('X',    HandleDelete,  'Удалить');
 
   FPathEdit := TEdit.Create(Self);
+  MarkInternalControl(FPathEdit);
   FPathEdit.Parent := Self;
   FPathEdit.Align := TAlignLayout.Top;
   FPathEdit.Position.Y := 100;
@@ -351,6 +365,7 @@ begin
   FPathEdit.TextSettings.VertAlign := TTextAlign.Center;
 
   FListHost := TRectangle.Create(Self);
+  MarkInternalControl(FListHost);
   FListHost.Parent := Self;
   FListHost.Align := TAlignLayout.Client;
   FListHost.Margins.Rect := RectF(8, 0, 8, 6);
@@ -367,12 +382,14 @@ begin
   FListHost.OnDragDrop := HandleDragDrop;
 
   FHeader := TLayout.Create(FListHost);
+  MarkInternalControl(FHeader);
   FHeader.Parent := FListHost;
   FHeader.Align := TAlignLayout.Top;
   FHeader.Height := FILE_HEADER_HEIGHT;
   FHeader.HitTest := False;
 
   HeaderLine := TRectangle.Create(FHeader);
+  MarkInternalControl(HeaderLine);
   HeaderLine.Parent := FHeader;
   HeaderLine.Align := TAlignLayout.Bottom;
   HeaderLine.Height := 1;
@@ -386,6 +403,7 @@ begin
   AddHeaderCell('Name', TAlignLayout.Client, 0, FILE_SORT_NAME);
 
   FList := TListBox.Create(FListHost);
+  MarkInternalControl(FList);
   FList.Parent := FListHost;
   FList.Align := TAlignLayout.Client;
   FList.Margins.Rect := RectF(1, 0, 1, 1);
@@ -1128,5 +1146,8 @@ begin
   FillList;
   UpdateRowSelection;
 end;
+
+initialization
+  RegisterFmxClasses([TnbFilePane]);
 
 end.

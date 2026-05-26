@@ -15,6 +15,7 @@ implementation
 
 uses
   System.Classes,
+  FMX.Types,
   DesignIntf,
   ModernSSHClient,
   Terminal.Control,
@@ -99,6 +100,12 @@ end;
 
 procedure Register;
 begin
+  RegisterFmxClasses([
+    TnbSSHClient,
+    TnbTerminalControl,
+    TnbFilePane
+  ]);
+
   RegisterComponents(PaletteName, [
     TnbSSHClient,
     TnbTerminalControl,
