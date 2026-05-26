@@ -17,8 +17,17 @@ A ready-to-run Windows x64 portable demo is published in [GitHub Releases](https
 |-----------|---------|
 | `TnbSSHClient` | SSH connection via `libssh2` (loaded dynamically) |
 | `TnbTerminalControl` | Visual `xterm-256color` terminal |
+| `TnbFilePane` | Local/SFTP file browser pane with themeable toolbar, rows, and drag/drop transfer hooks |
 
 Components register in the IDE palette under the **`nb DevOps`** tab.
+
+### File pane theming
+
+`TnbFilePane.ApplyColors(ABg, ASurface, ABorder, AText, AMuted, AAccent)` lets
+host applications drive the file browser from their own palette. The final two
+arguments are optional for older callers, but passing them is recommended so
+icons, selected rows, row separators, and drop indicators match the active app
+theme.
 
 ### Terminal features
 

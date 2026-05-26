@@ -1,65 +1,68 @@
-# nbDevOpsCockpit — Design-Time Package для Delphi/FMX
+﻿# nbDevOpsCockpit вЂ” Design-Time Package РґР»СЏ Delphi/FMX
+## 2026-05-26 note
+
+`TnbFilePane` is now part of the theming contract used by nbFleet. Prefer the 6-argument `ApplyColors(ABg, ASurface, ABorder, AText, AMuted, AAccent)` when a host application has a full palette. The last two arguments are optional for older code.
 
 Family of components for building DevOps tools.
 
-## Что внутри сейчас
+## Р§С‚Рѕ РІРЅСѓС‚СЂРё СЃРµР№С‡Р°СЃ
 
-| Компонент | Назначение |
+| РљРѕРјРїРѕРЅРµРЅС‚ | РќР°Р·РЅР°С‡РµРЅРёРµ |
 |---|---|
-| `TnbSSHClient` | SSH-соединение через libssh2 (Win/Linux/macOS) |
-| `TnbTerminalControl` | Визуальный xterm-256color терминал на Skia |
+| `TnbSSHClient` | SSH-СЃРѕРµРґРёРЅРµРЅРёРµ С‡РµСЂРµР· libssh2 (Win/Linux/macOS) |
+| `TnbTerminalControl` | Р’РёР·СѓР°Р»СЊРЅС‹Р№ xterm-256color С‚РµСЂРјРёРЅР°Р» РЅР° Skia |
 
-Палитра в IDE — `nb DevOps`.
+РџР°Р»РёС‚СЂР° РІ IDE вЂ” `nb DevOps`.
 
-## Что планируется добавить
+## Р§С‚Рѕ РїР»Р°РЅРёСЂСѓРµС‚СЃСЏ РґРѕР±Р°РІРёС‚СЊ
 
-- `TnbGitLabClient` — REST-клиент GitLab API
-- `TnbServerInventory` — инвентарь серверов с привязкой к проектам
-- `TnbSnippetRunner` — выполнение скриптов на удалённых серверах через SSH
-- `TnbAuditLogger` — журналирование действий в БД
+- `TnbGitLabClient` вЂ” REST-РєР»РёРµРЅС‚ GitLab API
+- `TnbServerInventory` вЂ” РёРЅРІРµРЅС‚Р°СЂСЊ СЃРµСЂРІРµСЂРѕРІ СЃ РїСЂРёРІСЏР·РєРѕР№ Рє РїСЂРѕРµРєС‚Р°Рј
+- `TnbSnippetRunner` вЂ” РІС‹РїРѕР»РЅРµРЅРёРµ СЃРєСЂРёРїС‚РѕРІ РЅР° СѓРґР°Р»С‘РЅРЅС‹С… СЃРµСЂРІРµСЂР°С… С‡РµСЂРµР· SSH
+- `TnbAuditLogger` вЂ” Р¶СѓСЂРЅР°Р»РёСЂРѕРІР°РЅРёРµ РґРµР№СЃС‚РІРёР№ РІ Р‘Р”
 
-## Файлы пакета
+## Р¤Р°Р№Р»С‹ РїР°РєРµС‚Р°
 
-| Файл | Что |
+| Р¤Р°Р№Р» | Р§С‚Рѕ |
 |---|---|
-| `nbDevOpsCockpit.dpk` | Описание пакета |
-| `nbDevOpsCockpit.dcr` | Иконки компонентов (24×24) |
-| `Reg_nbDevOpsCockpit.pas` | Регистрация в палитре |
-| `ModernSSHClient.pas` | Юнит с `TnbSSHClient` и worker-потоком |
+| `nbDevOpsCockpit.dpk` | РћРїРёСЃР°РЅРёРµ РїР°РєРµС‚Р° |
+| `nbDevOpsCockpit.dcr` | РРєРѕРЅРєРё РєРѕРјРїРѕРЅРµРЅС‚РѕРІ (24Г—24) |
+| `Reg_nbDevOpsCockpit.pas` | Р РµРіРёСЃС‚СЂР°С†РёСЏ РІ РїР°Р»РёС‚СЂРµ |
+| `ModernSSHClient.pas` | Р®РЅРёС‚ СЃ `TnbSSHClient` Рё worker-РїРѕС‚РѕРєРѕРј |
 
-Юниты `Terminal.*` и `GoghThemeLoader.pas` берутся из твоего проекта — пакет на них ссылается через `contains`.
+Р®РЅРёС‚С‹ `Terminal.*` Рё `GoghThemeLoader.pas` Р±РµСЂСѓС‚СЃСЏ РёР· С‚РІРѕРµРіРѕ РїСЂРѕРµРєС‚Р° вЂ” РїР°РєРµС‚ РЅР° РЅРёС… СЃСЃС‹Р»Р°РµС‚СЃСЏ С‡РµСЂРµР· `contains`.
 
-## Установка в Delphi (один раз)
+## РЈСЃС‚Р°РЅРѕРІРєР° РІ Delphi (РѕРґРёРЅ СЂР°Р·)
 
-1. **Открой `nbDevOpsCockpit.dpk`**: File → Open Project → выбрать `.dpk`
-2. **Project → Options → Delphi Compiler → Search Path** — добавить:
-   - Папку с `Terminal.*.pas` и `GoghThemeLoader.pas`
-   - Папку с Synapse (`blcksock.pas`)
-3. **Project → Build** — должно собраться без ошибок
-4. **Project → Install** — увидишь:
+1. **РћС‚РєСЂРѕР№ `nbDevOpsCockpit.dpk`**: File в†’ Open Project в†’ РІС‹Р±СЂР°С‚СЊ `.dpk`
+2. **Project в†’ Options в†’ Delphi Compiler в†’ Search Path** вЂ” РґРѕР±Р°РІРёС‚СЊ:
+   - РџР°РїРєСѓ СЃ `Terminal.*.pas` Рё `GoghThemeLoader.pas`
+   - РџР°РїРєСѓ СЃ Synapse (`blcksock.pas`)
+3. **Project в†’ Build** вЂ” РґРѕР»Р¶РЅРѕ СЃРѕР±СЂР°С‚СЊСЃСЏ Р±РµР· РѕС€РёР±РѕРє
+4. **Project в†’ Install** вЂ” СѓРІРёРґРёС€СЊ:
    > Package nbDevOpsCockpit installed.
    > Components registered: TnbSSHClient, TnbTerminalControl
 
-5. На палитре появится вкладка **`nb DevOps`** с двумя иконками
+5. РќР° РїР°Р»РёС‚СЂРµ РїРѕСЏРІРёС‚СЃСЏ РІРєР»Р°РґРєР° **`nb DevOps`** СЃ РґРІСѓРјСЏ РёРєРѕРЅРєР°РјРё
 
-Готово — теперь компоненты доступны во всех проектах.
+Р“РѕС‚РѕРІРѕ вЂ” С‚РµРїРµСЂСЊ РєРѕРјРїРѕРЅРµРЅС‚С‹ РґРѕСЃС‚СѓРїРЅС‹ РІРѕ РІСЃРµС… РїСЂРѕРµРєС‚Р°С….
 
-## Использование в форме
+## РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ РІ С„РѕСЂРјРµ
 
-1. **Drag** `TnbTerminalControl` на форму, `Align := Client`
-2. **Drag** `TnbSSHClient` рядом
-3. В **Object Inspector** у `TerminalControl1`:
-   - В свойстве `SSHClient` из dropdown'а выбрать `SSHClient1`
-4. У `SSHClient1` заполнить `Host`, `User`, `KeyPath` (или `Password`)
-5. Кнопка `Connect` → `SSHClient1.Connect;`
+1. **Drag** `TnbTerminalControl` РЅР° С„РѕСЂРјСѓ, `Align := Client`
+2. **Drag** `TnbSSHClient` СЂСЏРґРѕРј
+3. Р’ **Object Inspector** Сѓ `TerminalControl1`:
+   - Р’ СЃРІРѕР№СЃС‚РІРµ `SSHClient` РёР· dropdown'Р° РІС‹Р±СЂР°С‚СЊ `SSHClient1`
+4. РЈ `SSHClient1` Р·Р°РїРѕР»РЅРёС‚СЊ `Host`, `User`, `KeyPath` (РёР»Рё `Password`)
+5. РљРЅРѕРїРєР° `Connect` в†’ `SSHClient1.Connect;`
 
-В Object Inspector у `TnbSSHClient` доступны раздельные события:
+Р’ Object Inspector Сѓ `TnbSSHClient` РґРѕСЃС‚СѓРїРЅС‹ СЂР°Р·РґРµР»СЊРЅС‹Рµ СЃРѕР±С‹С‚РёСЏ:
 - `OnConnecting` / `OnAuthenticating` / `OnConnected` / `OnDisconnected`
 - `OnError(Sender, ErrorMessage: string)`
-- `OnStatusChange(Sender, Status)` — универсальное
-- `OnReadData(Sender, Data: string)` — поток данных от сервера
+- `OnStatusChange(Sender, Status)` вЂ” СѓРЅРёРІРµСЂСЃР°Р»СЊРЅРѕРµ
+- `OnReadData(Sender, Data: string)` вЂ” РїРѕС‚РѕРє РґР°РЅРЅС‹С… РѕС‚ СЃРµСЂРІРµСЂР°
 
-## Минимальный пример
+## РњРёРЅРёРјР°Р»СЊРЅС‹Р№ РїСЂРёРјРµСЂ
 
 ```pascal
 procedure TFormMain.btConnectClick(Sender: TObject);
@@ -79,26 +82,26 @@ begin
 end;
 ```
 
-Никакой ручной разводки `OnReadData` → `WriteText`. Привязка через
-`TerminalControl1.SSHClient := SSHClient1` всё разруливает в обе стороны.
+РќРёРєР°РєРѕР№ СЂСѓС‡РЅРѕР№ СЂР°Р·РІРѕРґРєРё `OnReadData` в†’ `WriteText`. РџСЂРёРІСЏР·РєР° С‡РµСЂРµР·
+`TerminalControl1.SSHClient := SSHClient1` РІСЃС‘ СЂР°Р·СЂСѓР»РёРІР°РµС‚ РІ РѕР±Рµ СЃС‚РѕСЂРѕРЅС‹.
 
-## Платформенные требования
+## РџР»Р°С‚С„РѕСЂРјРµРЅРЅС‹Рµ С‚СЂРµР±РѕРІР°РЅРёСЏ
 
-| OS | Что нужно |
+| OS | Р§С‚Рѕ РЅСѓР¶РЅРѕ |
 |---|---|
-| Windows | `libssh2.dll` рядом с `.exe` (вместе с `libcrypto-3-x64.dll`, `libssl-3-x64.dll`, `zlib1.dll`) |
+| Windows | `libssh2.dll` СЂСЏРґРѕРј СЃ `.exe` (РІРјРµСЃС‚Рµ СЃ `libcrypto-3-x64.dll`, `libssl-3-x64.dll`, `zlib1.dll`) |
 | Linux (Rocky/RHEL) | `sudo dnf install libssh2` |
 | Linux (Debian/Ubuntu) | `sudo apt install libssh2-1` |
 | macOS | `brew install libssh2` |
 
-## Multi-tab сессии
+## Multi-tab СЃРµСЃСЃРёРё
 
-Когда понадобится много вкладок:
-1. Создать `TFrame` с `TerminalControl1` + `SSHClient1` внутри (привязать через дизайнер)
-2. В runtime клонировать frame для каждой новой вкладки
+РљРѕРіРґР° РїРѕРЅР°РґРѕР±РёС‚СЃСЏ РјРЅРѕРіРѕ РІРєР»Р°РґРѕРє:
+1. РЎРѕР·РґР°С‚СЊ `TFrame` СЃ `TerminalControl1` + `SSHClient1` РІРЅСѓС‚СЂРё (РїСЂРёРІСЏР·Р°С‚СЊ С‡РµСЂРµР· РґРёР·Р°Р№РЅРµСЂ)
+2. Р’ runtime РєР»РѕРЅРёСЂРѕРІР°С‚СЊ frame РґР»СЏ РєР°Р¶РґРѕР№ РЅРѕРІРѕР№ РІРєР»Р°РґРєРё
 
-Архитектура `TnbSSHClient` уже поддерживает множественные независимые экземпляры — каждый со своим worker-thread'ом.
+РђСЂС…РёС‚РµРєС‚СѓСЂР° `TnbSSHClient` СѓР¶Рµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚ РјРЅРѕР¶РµСЃС‚РІРµРЅРЅС‹Рµ РЅРµР·Р°РІРёСЃРёРјС‹Рµ СЌРєР·РµРјРїР»СЏСЂС‹ вЂ” РєР°Р¶РґС‹Р№ СЃРѕ СЃРІРѕРёРј worker-thread'РѕРј.
 
-## Удаление пакета
+## РЈРґР°Р»РµРЅРёРµ РїР°РєРµС‚Р°
 
-Component → Install Packages → выбрать `nbDevOpsCockpit` → Remove.
+Component в†’ Install Packages в†’ РІС‹Р±СЂР°С‚СЊ `nbDevOpsCockpit` в†’ Remove.

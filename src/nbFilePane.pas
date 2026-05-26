@@ -56,7 +56,8 @@ type
     FSelectionColor: TAlphaColor;
     FButtons: TList<TnbToolButton>;
     FTransferButton: TnbToolButton;
-    FColBg, FColSurface, FColBorder, FColText, FColMuted: TAlphaColor;
+    FColBg, FColSurface, FColBorder, FColText, FColMuted,
+      FColAccent: TAlphaColor;
     FOnTransfer: TNotifyEvent;
     FOnActivated: TNotifyEvent;
     FOnError: TnbFileErrorEvent;
@@ -123,7 +124,8 @@ type
     function  SelectedEntry(out AEntry: TnbFileEntry): Boolean;
     function  EntryExists(const AName: string; out AIsDir: Boolean): Boolean;
     function  CurrentPath: string;
-    procedure ApplyColors(ABg, ASurface, ABorder, AText: TAlphaColor);
+    procedure ApplyColors(ABg, ASurface, ABorder, AText: TAlphaColor;
+      AMuted: TAlphaColor = 0; AAccent: TAlphaColor = 0);
 
     (* Glyph кнопки передачи; пусто — кнопка скрыта. Клик → OnTransfer. *)
     procedure SetTransferButton(const AGlyph, AHint: string);
@@ -173,6 +175,7 @@ begin
   FColBorder  := TAlphaColor($FF344056);
   FColText    := TAlphaColor($FFCCD4DE);
   FColMuted   := FILE_MUTED_TEXT;
+  FColAccent  := FILE_ICON_BLUE;
   FSelectionColor := TAlphaColor($FF263246);
   CanFocus := True;
   TabStop := True;
@@ -427,7 +430,7 @@ begin
     FListHost.Stroke.Kind := TBrushKind.Solid;
     if AVisible then
     begin
-      FListHost.Stroke.Color := TAlphaColor($FF7DDBFF);
+      FListHost.Stroke.Color := FColAccent;
       FListHost.Stroke.Thickness := 2;
     end
     else
@@ -658,7 +661,7 @@ begin
       Icon.StyledSettings := Icon.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Family, TStyledSetting.Size];
       Icon.TextSettings.Font.Family := FILE_ICON_FONT;
       Icon.TextSettings.Font.Size := 17;
-      Icon.TextSettings.FontColor := FILE_ICON_BLUE;
+      Icon.TextSettings.FontColor := FColAccent;
       Icon.TextSettings.VertAlign := TTextAlign.Center;
       Icon.TextSettings.HorzAlign := TTextAlign.Center;
 
@@ -697,7 +700,7 @@ begin
       Line.Align := TAlignLayout.Bottom;
       Line.Height := 1;
       Line.HitTest := False;
-      Line.Fill.Color := FILE_ROW_LINE;
+      Line.Fill.Color := TAlphaColor($18000000) or (FColBorder and $00FFFFFF);
       Line.Stroke.Kind := TBrushKind.None;
     end;
   finally
@@ -1092,7 +1095,8 @@ begin
   Result := AddButton(AGlyph, AOnClick, AHint);
 end;
 
-procedure TnbFilePane.ApplyColors(ABg, ASurface, ABorder, AText: TAlphaColor);
+procedure TnbFilePane.ApplyColors(ABg, ASurface, ABorder, AText,
+  AMuted, AAccent: TAlphaColor);
 var
   I, J: Integer;
   Child, GrandChild: TFmxObject;
@@ -1101,14 +1105,21 @@ begin
   FColSurface := ASurface;
   FColBorder := ABorder;
   FColText := AText;
-  FColMuted := TAlphaColor($FF000000)
-    or ((Round(((AText shr 16) and $FF) * 0.58 + ((ABg shr 16) and $FF) * 0.42) and $FF) shl 16)
-    or ((Round(((AText shr 8) and $FF) * 0.58 + ((ABg shr 8) and $FF) * 0.42) and $FF) shl 8)
-    or (Round((AText and $FF) * 0.58 + (ABg and $FF) * 0.42) and $FF);
+  if AMuted <> 0 then
+    FColMuted := AMuted
+  else
+    FColMuted := TAlphaColor($FF000000)
+      or ((Round(((AText shr 16) and $FF) * 0.58 + ((ABg shr 16) and $FF) * 0.42) and $FF) shl 16)
+      or ((Round(((AText shr 8) and $FF) * 0.58 + ((ABg shr 8) and $FF) * 0.42) and $FF) shl 8)
+      or (Round((AText and $FF) * 0.58 + (ABg and $FF) * 0.42) and $FF);
+  if AAccent <> 0 then
+    FColAccent := AAccent
+  else
+    FColAccent := AText;
   FSelectionColor := TAlphaColor($FF000000)
-    or ((Round(((ASurface shr 16) and $FF) * 0.82 + ((FILE_ICON_BLUE shr 16) and $FF) * 0.18) and $FF) shl 16)
-    or ((Round(((ASurface shr 8) and $FF) * 0.82 + ((FILE_ICON_BLUE shr 8) and $FF) * 0.18) and $FF) shl 8)
-    or (Round((ASurface and $FF) * 0.82 + (FILE_ICON_BLUE and $FF) * 0.18) and $FF);
+    or ((Round(((ASurface shr 16) and $FF) * 0.82 + ((FColAccent shr 16) and $FF) * 0.18) and $FF) shl 16)
+    or ((Round(((ASurface shr 8) and $FF) * 0.82 + ((FColAccent shr 8) and $FF) * 0.18) and $FF) shl 8)
+    or (Round((ASurface and $FF) * 0.82 + (FColAccent and $FF) * 0.18) and $FF);
   for I := 0 to FButtons.Count - 1 do
     FButtons[I].SetGlyphColor(AText);
   if FPathEdit <> nil then
