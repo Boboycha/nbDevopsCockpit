@@ -781,7 +781,7 @@ begin
     ssIdle:
       (* OnDisconnected срабатывает только если до этого было реальное подключение,
          а не первый ssIdle при создании компонента *)
-      if (PrevStatus in [ssConnected, ssAuthenticating, ssError]) and
+      if (PrevStatus in [ssConnected, ssAuthenticating]) and
          Assigned(FOnDisconnected) then
         FOnDisconnected(Self);
   end;

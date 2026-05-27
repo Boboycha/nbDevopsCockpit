@@ -1,4 +1,4 @@
-unit uDemoMain;
+п»їunit uDemoMain;
 
 interface
 
@@ -63,21 +63,21 @@ begin
 
   if SSHClient1.Host = '' then
   begin
-    ShowMessage('Укажите хост для подключения.');
+    ShowMessage('РЈРєР°Р¶РёС‚Рµ С…РѕСЃС‚ РґР»СЏ РїРѕРґРєР»СЋС‡РµРЅРёСЏ.');
     edHost.SetFocus;
     Exit;
   end;
 
   if SSHClient1.User = '' then
   begin
-    ShowMessage('Укажите имя пользователя.');
+    ShowMessage('РЈРєР°Р¶РёС‚Рµ РёРјСЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.');
     edUser.SetFocus;
     Exit;
   end;
 
   if SSHClient1.Port = '' then
   begin
-    ShowMessage('Укажите порт SSH.');
+    ShowMessage('РЈРєР°Р¶РёС‚Рµ РїРѕСЂС‚ SSH.');
     edPort.SetFocus;
     Exit;
   end;
@@ -92,7 +92,7 @@ end;
 
 procedure TDemoForm.BrowseThemeClick(Sender: TObject);
 begin
-  odTheme.Filter := 'Темы Gogh (*.yml;*.yaml)|*.yml;*.yaml|Все файлы (*.*)|*.*';
+  odTheme.Filter := 'РўРµРјС‹ Gogh (*.yml;*.yaml)|*.yml;*.yaml|Р’СЃРµ С„Р°Р№Р»С‹ (*.*)|*.*';
   if not odTheme.Execute then Exit;
   TerminalControl1.LoadThemeFromFile(odTheme.FileName);
   TerminalControl1.SetFocus;
@@ -100,7 +100,7 @@ end;
 
 procedure TDemoForm.BrowseKeyClick(Sender: TObject);
 begin
-  odKey.Filter := 'Приватные ключи (*.pem;*.key;id_*)|*.pem;*.key;id_*|Все файлы (*.*)|*.*';
+  odKey.Filter := 'РџСЂРёРІР°С‚РЅС‹Рµ РєР»СЋС‡Рё (*.pem;*.key;id_*)|*.pem;*.key;id_*|Р’СЃРµ С„Р°Р№Р»С‹ (*.*)|*.*';
   if edKeyPath.Text <> '' then
     odKey.FileName := edKeyPath.Text;
   if not odKey.Execute then Exit;
@@ -119,13 +119,13 @@ begin
     TerminalControl1.SetFocus;
     Exit;
   end;
-  Dec(Idx);  // 0 = «По умолчанию», поэтому сдвигаем на один
+  Dec(Idx);  // 0 = В«РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋВ», РїРѕСЌС‚РѕРјСѓ СЃРґРІРёРіР°РµРј РЅР° РѕРґРёРЅ
   if Idx < Length(FThemes) then
     TerminalControl1.LoadThemeFromFile(FThemes[Idx].FileName);
   TerminalControl1.SetFocus;
 end;
 
-// --- Обновление состояния кнопок ---
+// --- РћР±РЅРѕРІР»РµРЅРёРµ СЃРѕСЃС‚РѕСЏРЅРёСЏ РєРЅРѕРїРѕРє ---
 
 procedure TDemoForm.UpdateButtons;
 begin
@@ -166,17 +166,17 @@ end;
 procedure TDemoForm.SSHError(Sender: TObject; const Msg: string);
 begin
   UpdateButtons;
-  // Ошибка уже выводится в терминал через TnbTerminalControl.HandleSSHStatusChange
+  // РћС€РёР±РєР° СѓР¶Рµ РІС‹РІРѕРґРёС‚СЃСЏ РІ С‚РµСЂРјРёРЅР°Р» С‡РµСЂРµР· TnbTerminalControl.HandleSSHStatusChange
 end;
 
 procedure TDemoForm.SSHDisconnected(Sender: TObject);
 begin
   UpdateButtons;
-  // Намеренно НЕ вызываем TerminalControl1.Clear — содержимое терминала
-  // (включая сообщения об ошибках) должно остаться видимым после отключения.
+  // РќР°РјРµСЂРµРЅРЅРѕ РќР• РІС‹Р·С‹РІР°РµРј TerminalControl1.Clear вЂ” СЃРѕРґРµСЂР¶РёРјРѕРµ С‚РµСЂРјРёРЅР°Р»Р°
+  // (РІРєР»СЋС‡Р°СЏ СЃРѕРѕР±С‰РµРЅРёСЏ РѕР± РѕС€РёР±РєР°С…) РґРѕР»Р¶РЅРѕ РѕСЃС‚Р°С‚СЊСЃСЏ РІРёРґРёРјС‹Рј РїРѕСЃР»Рµ РѕС‚РєР»СЋС‡РµРЅРёСЏ.
 end;
 
-// --- Инициализация ---
+// --- РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ ---
 
 procedure TDemoForm.FormCreate(Sender: TObject);
 var
@@ -186,13 +186,13 @@ begin
   TerminalControl1.TabStop := True;
   TerminalControl1.CanFocus := True;
 
-  // Подписываемся на отдельные события SSH — OnStatusChange занят TerminalControl1
+  // РџРѕРґРїРёСЃС‹РІР°РµРјСЃСЏ РЅР° РѕС‚РґРµР»СЊРЅС‹Рµ СЃРѕР±С‹С‚РёСЏ SSH вЂ” OnStatusChange Р·Р°РЅСЏС‚ TerminalControl1
   SSHClient1.OnConnecting   := SSHConnecting;
   SSHClient1.OnConnected    := SSHConnected;
   SSHClient1.OnError        := SSHError;
   SSHClient1.OnDisconnected := SSHDisconnected;
 
-  // Начальное состояние кнопок
+  // РќР°С‡Р°Р»СЊРЅРѕРµ СЃРѕСЃС‚РѕСЏРЅРёРµ РєРЅРѕРїРѕРє
   CornerButton2.Enabled := False;
   SSHClient1.Host := '';
   SSHClient1.Port := '22';
@@ -203,7 +203,7 @@ begin
   edUser.Text := '';
   edKeyPath.Text := '';
 
-  // Рядом с exe (деплой); при разработке — в репозитории demo\themes\
+  // Р СЏРґРѕРј СЃ exe (РґРµРїР»РѕР№); РїСЂРё СЂР°Р·СЂР°Р±РѕС‚РєРµ вЂ” РІ СЂРµРїРѕР·РёС‚РѕСЂРёРё demo\themes\
   ThemesDir := ExtractFilePath(ParamStr(0)) + 'themes\';
   if not DirectoryExists(ThemesDir) then
     ThemesDir := ExpandFileName(ExtractFilePath(ParamStr(0)) +
@@ -212,7 +212,7 @@ begin
 
   cbTheme.Items.BeginUpdate;
   try
-    cbTheme.Items.Add('По умолчанию');
+    cbTheme.Items.Add('РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ');
     for I := 0 to High(FThemes) do
       cbTheme.Items.Add(FThemes[I].Name);
   finally

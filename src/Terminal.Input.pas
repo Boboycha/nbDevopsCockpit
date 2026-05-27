@@ -1,4 +1,4 @@
-unit Terminal.Input;
+﻿unit Terminal.Input;
 
 interface
 

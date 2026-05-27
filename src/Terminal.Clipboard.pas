@@ -1,4 +1,4 @@
-unit Terminal.Clipboard;
+﻿unit Terminal.Clipboard;
 
 interface
 

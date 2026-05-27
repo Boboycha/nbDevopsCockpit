@@ -485,7 +485,7 @@ begin
                   end;
                 end;
               end;
-              if (Ch = 'm') and (FParamBuffer = '') then
+              if (Ch = 'm') and (FParamBuffer = '') and not IsPrivateMode then
               begin
                 SetLength(Params, 1);
                 Params[0] := 0;

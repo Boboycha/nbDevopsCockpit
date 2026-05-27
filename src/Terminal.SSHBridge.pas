@@ -1,4 +1,4 @@
-unit Terminal.SSHBridge;
+﻿unit Terminal.SSHBridge;
 
 interface
 

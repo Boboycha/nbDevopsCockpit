@@ -1,4 +1,4 @@
-unit nbSFTPClient;
+﻿unit nbSFTPClient;
 
 interface
 
@@ -479,6 +479,8 @@ begin
     if Result <> LIBSSH2_ERROR_EAGAIN then Exit;
     Sleep(10);
   until Terminated;
+  (* Поток остановлен штатно — не ошибка. *)
+  Result := 0;
 end;
 
 function TSFTPWorkerThread.WaitPointer(const AFunc: TFunc<Pointer>): Pointer;
@@ -704,6 +706,7 @@ var
   ReadLen: NativeInt;
   Stream: TFileStream;
   Attrs: TLIBSSH2_SFTP_ATTRIBUTES;
+  LSuccess: Boolean;
 begin
   PathA := ToUtf8Ansi(ARemotePath);
   FillChar(Attrs, SizeOf(Attrs), 0);
@@ -723,6 +726,7 @@ begin
 
   TDirectory.CreateDirectory(TPath.GetDirectoryName(ALocalPath));
   Stream := TFileStream.Create(ALocalPath, fmCreate);
+  LSuccess := False;
   try
     SetLength(Buf, 32768);
     FCurrentDone := 0;
@@ -740,11 +744,15 @@ begin
         Synchronize(DoProgress);
       end;
     until (ReadLen <= 0) or Terminated;
+    if Terminated then Exit;
     if ReadLen < 0 then raise Exception.Create('Download failed');
+    LSuccess := True;
     FCurrentPath := ARemotePath;
     Synchronize(DoTransferDone);
   finally
     Stream.Free;
+    if (not LSuccess) and FileExists(ALocalPath) then
+      System.SysUtils.DeleteFile(ALocalPath);
     ssh2_sftp_close_handle(Handle);
   end;
 end;
