@@ -4,7 +4,7 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.Types, System.UITypes,
-  FMX.Controls, FMX.StdCtrls,
+  FMX.Controls, FMX.StdCtrls, FMX.Graphics, FMX.Objects,
   nbFileSources;
 
 const
@@ -37,9 +37,15 @@ const
 type
   TnbToolButton = class(TSpeedButton)
   private
+    FLocalBg: TAlphaColor;
+    FLocalBorder: TAlphaColor;
+    FLocalText: TAlphaColor;
+    procedure HandleApplyStyleLookup(Sender: TObject);
+    procedure PaintLocalChrome;
     procedure SetGlyphText(const AValue: string);
   public
     constructor Create(AOwner: TComponent); override;
+    procedure ApplyLocalChrome(ABg, ABorder, AText: TAlphaColor);
     procedure SetGlyphColor(AColor: TAlphaColor);
     property Glyph: string write SetGlyphText;
   end;
@@ -172,6 +178,49 @@ begin
   TextSettings.HorzAlign := TTextAlign.Center;
   TextSettings.VertAlign := TTextAlign.Center;
   TextSettings.Trimming := TTextTrimming.None;
+  FLocalBg := TAlphaColor($FF141820);
+  FLocalBorder := TAlphaColor($FF344056);
+  FLocalText := TAlphaColor($FFCCD4DE);
+  OnApplyStyleLookup := HandleApplyStyleLookup;
+end;
+
+procedure TnbToolButton.HandleApplyStyleLookup(Sender: TObject);
+begin
+  PaintLocalChrome;
+end;
+
+procedure TnbToolButton.PaintLocalChrome;
+var
+  Obj: TFmxObject;
+  Shape: TShape;
+
+  procedure PaintShape(const AName: string);
+  begin
+    Obj := FindStyleResource(AName);
+    if Obj is TShape then
+    begin
+      Shape := TShape(Obj);
+      Shape.Fill.Kind := TBrushKind.Solid;
+      Shape.Fill.Color := FLocalBg;
+      Shape.Stroke.Kind := TBrushKind.Solid;
+      Shape.Stroke.Color := FLocalBorder;
+    end;
+  end;
+
+begin
+  StyledSettings := StyledSettings - [TStyledSetting.FontColor];
+  TextSettings.FontColor := FLocalText;
+  PaintShape('background');
+  PaintShape('bg');
+end;
+
+procedure TnbToolButton.ApplyLocalChrome(ABg, ABorder, AText: TAlphaColor);
+begin
+  FLocalBg := ABg;
+  FLocalBorder := ABorder;
+  FLocalText := AText;
+  ApplyStyleLookup;
+  PaintLocalChrome;
 end;
 
 procedure TnbToolButton.SetGlyphText(const AValue: string);
@@ -181,8 +230,10 @@ end;
 
 procedure TnbToolButton.SetGlyphColor(AColor: TAlphaColor);
 begin
+  FLocalText := AColor;
   StyledSettings := StyledSettings - [TStyledSetting.FontColor];
   TextSettings.FontColor := AColor;
+  PaintLocalChrome;
 end;
 
 end.

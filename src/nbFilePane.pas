@@ -111,6 +111,8 @@ type
     procedure HandleRename(Sender: TObject);
     procedure HandleDelete(Sender: TObject);
     procedure HandleTransfer(Sender: TObject);
+    procedure HandlePathEditApplyStyle(Sender: TObject);
+    procedure PaintPathEditChrome;
   protected
     procedure KeyDown(var Key: Word; var KeyChar: WideChar;
       Shift: TShiftState); override;
@@ -366,12 +368,13 @@ begin
   FPathEdit.ReadOnly := True;
   FPathEdit.TextSettings.HorzAlign := TTextAlign.Leading;
   FPathEdit.TextSettings.VertAlign := TTextAlign.Center;
+  FPathEdit.OnApplyStyleLookup := HandlePathEditApplyStyle;
 
   FListHost := TRectangle.Create(Self);
   MarkInternalControl(FListHost);
   FListHost.Parent := Self;
   FListHost.Align := TAlignLayout.Client;
-  FListHost.Margins.Rect := RectF(8, 0, 8, 6);
+  FListHost.Margins.Rect := RectF(8, 0, 8, 0);
   FListHost.ClipChildren := True;
   FListHost.HitTest := True;
   FListHost.Fill.Kind := TBrushKind.Solid;
@@ -379,8 +382,8 @@ begin
   FListHost.Stroke.Kind := TBrushKind.Solid;
   FListHost.Stroke.Color := FColBorder;
   FListHost.Stroke.Thickness := 1;
-  FListHost.XRadius := 6;
-  FListHost.YRadius := 6;
+  FListHost.XRadius := 0;
+  FListHost.YRadius := 0;
   FListHost.OnDragOver := HandleDragOver;
   FListHost.OnDragDrop := HandleDragDrop;
 
@@ -1095,6 +1098,40 @@ begin
   Result := AddButton(AGlyph, AOnClick, AHint);
 end;
 
+procedure TnbFilePane.HandlePathEditApplyStyle(Sender: TObject);
+begin
+  PaintPathEditChrome;
+end;
+
+procedure TnbFilePane.PaintPathEditChrome;
+var
+  Obj: TFmxObject;
+  Shape: TShape;
+
+  procedure PaintShape(const AName: string; AFill: TAlphaColor);
+  begin
+    Obj := FPathEdit.FindStyleResource(AName);
+    if Obj is TShape then
+    begin
+      Shape := TShape(Obj);
+      Shape.Fill.Kind := TBrushKind.Solid;
+      Shape.Fill.Color := AFill;
+      Shape.Stroke.Kind := TBrushKind.Solid;
+      Shape.Stroke.Color := FColBorder;
+    end;
+  end;
+
+begin
+  if FPathEdit = nil then Exit;
+
+  FPathEdit.StyledSettings := FPathEdit.StyledSettings -
+    [TStyledSetting.FontColor];
+  FPathEdit.TextSettings.FontColor := FColText;
+  PaintShape('background', FColBg);
+  PaintShape('bg_rest', FColBg);
+  PaintShape('bg_focused', FColSurface);
+end;
+
 procedure TnbFilePane.ApplyColors(ABg, ASurface, ABorder, AText,
   AMuted, AAccent: TAlphaColor);
 var
@@ -1121,12 +1158,11 @@ begin
     or ((Round(((ASurface shr 8) and $FF) * 0.82 + ((FColAccent shr 8) and $FF) * 0.18) and $FF) shl 8)
     or (Round((ASurface and $FF) * 0.82 + (FColAccent and $FF) * 0.18) and $FF);
   for I := 0 to FButtons.Count - 1 do
-    FButtons[I].SetGlyphColor(AText);
+    FButtons[I].ApplyLocalChrome(ABg, ABorder, AText);
   if FPathEdit <> nil then
   begin
-    FPathEdit.StyledSettings := FPathEdit.StyledSettings - [TStyledSetting.FontColor];
-    FPathEdit.TextSettings.FontColor := AText;
     FPathEdit.ApplyStyleLookup;
+    PaintPathEditChrome;
   end;
   if FListHost <> nil then
   begin
