@@ -56,6 +56,7 @@ type
     FSelectionColor: TAlphaColor;
     FButtons: TList<TnbToolButton>;
     FTransferButton: TnbToolButton;
+    FStyleLookupPrefix: string;
     FColBg, FColSurface, FColBorder, FColText, FColMuted,
       FColAccent: TAlphaColor;
     FOnTransfer: TNotifyEvent;
@@ -113,6 +114,9 @@ type
     procedure HandleTransfer(Sender: TObject);
     procedure HandlePathEditApplyStyle(Sender: TObject);
     procedure PaintPathEditChrome;
+    function ScopedStyle(const ABaseStyle: string): string;
+    procedure SetStyleLookupPrefix(const AValue: string);
+    procedure ApplyStyleLookups;
   protected
     procedure KeyDown(var Key: Word; var KeyChar: WideChar;
       Shift: TShiftState); override;
@@ -135,6 +139,8 @@ type
        сервер»). Возвращает кнопку для дальнейшей настройки. *)
     function AddActionButton(const AGlyph, AHint: string;
       AOnClick: TNotifyEvent): TnbToolButton;
+    property StyleLookupPrefix: string read FStyleLookupPrefix
+      write SetStyleLookupPrefix;
 
   published
     property OnTransfer: TNotifyEvent read FOnTransfer write FOnTransfer;
@@ -281,6 +287,7 @@ begin
   Result := TnbToolButton.Create(Self);
   MarkInternalControl(Result);
   Result.Parent := FToolBar;
+  Result.StyleLookup := ScopedStyle('speedbuttonstyle');
   Result.Glyph := FileToolIconFor(AGlyph, AHint);
   Result.SetGlyphColor(FColText);
   Result.OnClick := AOnClick;
@@ -364,7 +371,7 @@ begin
   FPathEdit.Position.Y := 100;
   FPathEdit.Height := 30;
   FPathEdit.Margins.Rect := RectF(8, 2, 8, 4);
-  FPathEdit.StyleLookup := 'editstyle';
+  FPathEdit.StyleLookup := ScopedStyle('editstyle');
   FPathEdit.ReadOnly := True;
   FPathEdit.TextSettings.HorzAlign := TTextAlign.Leading;
   FPathEdit.TextSettings.VertAlign := TTextAlign.Center;
@@ -413,7 +420,7 @@ begin
   FList.Parent := FListHost;
   FList.Align := TAlignLayout.Client;
   FList.Margins.Rect := RectF(1, 0, 1, 1);
-  FList.StyleLookup := 'listboxstyle';
+  FList.StyleLookup := ScopedStyle('listboxstyle');
   FList.ShowScrollBars := True;
   FList.ClipChildren := True;
   FList.HitTest := True;
@@ -586,7 +593,7 @@ begin
       Item.Height := FILE_ROW_HEIGHT;
       Item.Tag := I;
       Item.Text := '';
-      Item.StyleLookup := 'listboxitemstyle';
+      Item.StyleLookup := ScopedStyle('listboxitemstyle');
       Item.StyledSettings := Item.StyledSettings - [TStyledSetting.FontColor];
       Item.TextSettings.FontColor := FColText;
       Item.TextSettings.HorzAlign := TTextAlign.Leading;
@@ -1090,6 +1097,34 @@ begin
     FTransferButton.Hint := AHint;
     FTransferButton.Visible := True;
   end;
+end;
+
+function TnbFilePane.ScopedStyle(const ABaseStyle: string): string;
+begin
+  if FStyleLookupPrefix = '' then
+    Result := ABaseStyle
+  else
+    Result := FStyleLookupPrefix + ABaseStyle;
+end;
+
+procedure TnbFilePane.ApplyStyleLookups;
+var
+  I: Integer;
+begin
+  for I := 0 to FButtons.Count - 1 do
+    FButtons[I].StyleLookup := ScopedStyle('speedbuttonstyle');
+  if FPathEdit <> nil then
+    FPathEdit.StyleLookup := ScopedStyle('editstyle');
+  if FList <> nil then
+    FList.StyleLookup := ScopedStyle('listboxstyle');
+  FillList;
+end;
+
+procedure TnbFilePane.SetStyleLookupPrefix(const AValue: string);
+begin
+  if FStyleLookupPrefix = AValue then Exit;
+  FStyleLookupPrefix := AValue;
+  ApplyStyleLookups;
 end;
 
 function TnbFilePane.AddActionButton(const AGlyph, AHint: string;

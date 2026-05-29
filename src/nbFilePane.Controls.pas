@@ -41,6 +41,8 @@ type
     FLocalBorder: TAlphaColor;
     FLocalText: TAlphaColor;
     procedure HandleApplyStyleLookup(Sender: TObject);
+    procedure HandleMouseEnter(Sender: TObject);
+    procedure HandleMouseLeave(Sender: TObject);
     procedure PaintLocalChrome;
     procedure SetGlyphText(const AValue: string);
   public
@@ -182,10 +184,24 @@ begin
   FLocalBorder := TAlphaColor($FF344056);
   FLocalText := TAlphaColor($FFCCD4DE);
   OnApplyStyleLookup := HandleApplyStyleLookup;
+  OnMouseEnter := HandleMouseEnter;
+  OnMouseLeave := HandleMouseLeave;
 end;
 
 procedure TnbToolButton.HandleApplyStyleLookup(Sender: TObject);
 begin
+  PaintLocalChrome;
+end;
+
+procedure TnbToolButton.HandleMouseEnter(Sender: TObject);
+begin
+  Opacity := 1.0;
+  PaintLocalChrome;
+end;
+
+procedure TnbToolButton.HandleMouseLeave(Sender: TObject);
+begin
+  Opacity := 1.0;
   PaintLocalChrome;
 end;
 
@@ -219,7 +235,6 @@ begin
   FLocalBg := ABg;
   FLocalBorder := ABorder;
   FLocalText := AText;
-  ApplyStyleLookup;
   PaintLocalChrome;
 end;
 
