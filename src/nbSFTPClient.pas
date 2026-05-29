@@ -503,6 +503,8 @@ begin
   Result := False;
   EnsureSFTPLibLoaded;
   FSocket := TTCPBlockSocket.Create;
+  FSocket.ConnectionTimeout := 10000;
+  FSocket.SetTimeout(10000);
   FSocket.Connect(FOwner.Host, FOwner.Port);
   if FSocket.LastError <> 0 then
   begin
