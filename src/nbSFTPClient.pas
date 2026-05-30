@@ -4,7 +4,7 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.SyncObjs, System.Generics.Collections,
-  blcksock;
+  blcksock, synsock;
 
 type
   PLIBSSH2_SESSION = type Pointer;
@@ -36,6 +36,54 @@ type
     Kind: TSFTPCommandKind;
     Path1: string;
     Path2: string;
+  end;
+
+  TnbSFTPConnectionInfo = record
+    Host: string;
+    Port: string;
+    User: string;
+    Password: string;
+    Passphrase: string;
+    KeyData: AnsiString;
+    PubKeyData: AnsiString;
+  end;
+
+  TnbSFTPRawSession = class
+  private
+    FInfo: TnbSFTPConnectionInfo;
+    FSocket: TTCPBlockSocket;
+    FSession: PLIBSSH2_SESSION;
+    FSFTP: PLIBSSH2_SFTP;
+    FLastError: string;
+    FCancelled: TFunc<Boolean>;
+    FIsStreamingSession: Boolean;
+    function GetSessionError: string;
+    function GetSFTPError: string;
+    function IsCancelled: Boolean;
+    function WaitSocket(ATimeoutMs: Integer): Boolean;
+    function WaitResult(const AFunc: TFunc<Integer>): Integer;
+    function WaitResultFor(const AFunc: TFunc<Integer>;
+      ATimeoutMs: Cardinal): Integer;
+    function WaitPointer(const AFunc: TFunc<Pointer>): Pointer;
+  public
+    constructor Create(const AInfo: TnbSFTPConnectionInfo;
+      const ACancelled: TFunc<Boolean> = nil;
+      AIsStreamingSession: Boolean = False);
+    destructor Destroy; override;
+
+    procedure Connect;
+    procedure Disconnect;
+    procedure AbortDisconnect;
+    function StatSize(const ARemotePath: string): Int64;
+    function OpenRead(const ARemotePath: string): PLIBSSH2_SFTP_HANDLE;
+    function OpenWrite(const ARemotePath: string): PLIBSSH2_SFTP_HANDLE;
+    procedure CloseFile(var AHandle: PLIBSSH2_SFTP_HANDLE);
+    function Read(AHandle: PLIBSSH2_SFTP_HANDLE; var ABuffer;
+      ACount: NativeUInt): NativeInt;
+    function Write(AHandle: PLIBSSH2_SFTP_HANDLE; const ABuffer;
+      ACount: NativeUInt): NativeInt;
+
+    property LastError: string read FLastError;
   end;
 
   TSFTPWorkerThread = class(TThread)
@@ -109,6 +157,7 @@ type
     procedure SetPrivateKeyFromString(const APrivKeyPEM: AnsiString;
       const APubKey: AnsiString = '');
     procedure ClearPrivateKeyData;
+    procedure ExportConnectionInfo(out AInfo: TnbSFTPConnectionInfo);
 
     procedure ListDir(const APath: string);
     procedure Download(const ARemotePath, ALocalPath: string);
@@ -159,10 +208,13 @@ const
   LIBSSH2_SFTP_OPENFILE = 0;
   LIBSSH2_SFTP_OPENDIR = 2;
   LIBSSH2_SFTP_STAT = 0;
+  LIBSSH2_SESSION_BLOCK_INBOUND = $0001;
+  LIBSSH2_SESSION_BLOCK_OUTBOUND = $0002;
   LIBSSH2_SFTP_ATTR_SIZE = $00000001;
   LIBSSH2_SFTP_ATTR_PERMISSIONS = $00000004;
   LIBSSH2_SFTP_ATTR_ACMODTIME = $00000008;
   LIBSSH2_FX_EOF = 1;
+  RAW_STREAM_OPERATION_TIMEOUT_MS = 30000;
   S_IFMT = $F000;
   S_IFDIR = $4000;
 
@@ -206,6 +258,8 @@ type
   Tlibssh2_session_last_errno = function(session: PLIBSSH2_SESSION): Integer; cdecl;
   Tlibssh2_session_set_blocking = procedure(session: PLIBSSH2_SESSION;
     blocking: Integer); cdecl;
+  Tlibssh2_session_block_directions = function(
+    session: PLIBSSH2_SESSION): Integer; cdecl;
   Tlibssh2_userauth_publickey_frommemory = function(session: PLIBSSH2_SESSION;
     username: PAnsiChar; username_len: NativeUInt;
     publickeydata: PAnsiChar; publickeydata_len: NativeUInt;
@@ -254,6 +308,7 @@ var
   ssh2_session_last_error: Tlibssh2_session_last_error;
   ssh2_session_last_errno: Tlibssh2_session_last_errno;
   ssh2_session_set_blocking: Tlibssh2_session_set_blocking;
+  ssh2_session_block_directions: Tlibssh2_session_block_directions;
   ssh2_userauth_publickey_frommemory: Tlibssh2_userauth_publickey_frommemory;
   ssh2_userauth_password_ex: Tlibssh2_userauth_password_ex;
   ssh2_sftp_init: Tlibssh2_sftp_init;
@@ -325,6 +380,8 @@ begin
     @ssh2_session_last_error := ResolveProc('libssh2_session_last_error');
     @ssh2_session_last_errno := ResolveProc('libssh2_session_last_errno');
     @ssh2_session_set_blocking := ResolveProc('libssh2_session_set_blocking');
+    @ssh2_session_block_directions :=
+      ResolveProc('libssh2_session_block_directions');
     @ssh2_userauth_publickey_frommemory := ResolveProc('libssh2_userauth_publickey_frommemory');
     @ssh2_userauth_password_ex := ResolveProc('libssh2_userauth_password_ex');
     @ssh2_sftp_init := ResolveProc('libssh2_sftp_init');
@@ -360,6 +417,382 @@ begin
     Result := ADir + AName
   else
     Result := ADir + '/' + AName;
+end;
+
+{ TnbSFTPRawSession }
+
+constructor TnbSFTPRawSession.Create(const AInfo: TnbSFTPConnectionInfo;
+  const ACancelled: TFunc<Boolean>; AIsStreamingSession: Boolean);
+begin
+  inherited Create;
+  FInfo := AInfo;
+  FCancelled := ACancelled;
+  FIsStreamingSession := AIsStreamingSession;
+end;
+
+destructor TnbSFTPRawSession.Destroy;
+begin
+  Disconnect;
+  inherited;
+end;
+
+function TnbSFTPRawSession.GetSessionError: string;
+var
+  ErrMsg: PAnsiChar;
+  ErrLen: Integer;
+begin
+  Result := '';
+  ErrMsg := nil;
+  ErrLen := 0;
+  if (FSession <> nil) and Assigned(ssh2_session_last_error) then
+    ssh2_session_last_error(FSession, @ErrMsg, @ErrLen, 0);
+  if (ErrMsg <> nil) and (ErrLen > 0) then
+    Result := string(UTF8String(Copy(AnsiString(ErrMsg), 1, ErrLen)));
+  if Result = '' then
+    Result := 'libssh2 error';
+  FLastError := Result;
+end;
+
+function TnbSFTPRawSession.GetSFTPError: string;
+var
+  Code: Cardinal;
+begin
+  Result := GetSessionError;
+  if (FSFTP <> nil) and Assigned(ssh2_sftp_last_error) then
+  begin
+    Code := ssh2_sftp_last_error(FSFTP);
+    if Code <> 0 then
+      Result := Format('%s (SFTP status %d)', [Result, Code]);
+  end;
+  FLastError := Result;
+end;
+
+function TnbSFTPRawSession.IsCancelled: Boolean;
+begin
+  Result := Assigned(FCancelled) and FCancelled();
+end;
+
+function TnbSFTPRawSession.WaitSocket(ATimeoutMs: Integer): Boolean;
+var
+  Directions: Integer;
+  ReadSet, WriteSet: TFDSet;
+  ReadPtr, WritePtr: PFDSet;
+  TimeVal: TTimeVal;
+begin
+  Result := False;
+  if (FSocket = nil) or (FSession = nil) or
+     not Assigned(ssh2_session_block_directions) then
+  begin
+    Sleep(10);
+    Exit;
+  end;
+
+  Directions := ssh2_session_block_directions(FSession);
+  ReadPtr := nil;
+  WritePtr := nil;
+
+  if (Directions and LIBSSH2_SESSION_BLOCK_INBOUND) <> 0 then
+  begin
+    FD_ZERO(ReadSet);
+    FD_SET(FSocket.Socket, ReadSet);
+    ReadPtr := @ReadSet;
+  end;
+
+  if (Directions and LIBSSH2_SESSION_BLOCK_OUTBOUND) <> 0 then
+  begin
+    FD_ZERO(WriteSet);
+    FD_SET(FSocket.Socket, WriteSet);
+    WritePtr := @WriteSet;
+  end;
+
+  if (ReadPtr = nil) and (WritePtr = nil) then
+  begin
+    Sleep(10);
+    Exit;
+  end;
+
+  TimeVal.tv_sec := ATimeoutMs div 1000;
+  TimeVal.tv_usec := (ATimeoutMs mod 1000) * 1000;
+  Result := synsock.Select(FSocket.Socket + 1, ReadPtr, WritePtr, nil,
+    @TimeVal) > 0;
+end;
+
+function TnbSFTPRawSession.WaitResult(const AFunc: TFunc<Integer>): Integer;
+var
+  Started: UInt64;
+begin
+  Started := TThread.GetTickCount64;
+  repeat
+    Result := AFunc();
+    if Result <> LIBSSH2_ERROR_EAGAIN then Exit;
+    if IsCancelled then
+      raise EAbort.Create('SFTP operation cancelled');
+    if FIsStreamingSession and
+       (TThread.GetTickCount64 - Started >= RAW_STREAM_OPERATION_TIMEOUT_MS) then
+      raise Exception.Create('SFTP streaming operation timed out');
+    WaitSocket(1000);
+  until False;
+end;
+
+function TnbSFTPRawSession.WaitResultFor(const AFunc: TFunc<Integer>;
+  ATimeoutMs: Cardinal): Integer;
+var
+  Started: Cardinal;
+begin
+  Started := TThread.GetTickCount;
+  repeat
+    Result := AFunc();
+    if Result <> LIBSSH2_ERROR_EAGAIN then Exit;
+    if IsCancelled or (TThread.GetTickCount - Started >= ATimeoutMs) then Exit;
+    WaitSocket(100);
+  until False;
+end;
+
+function TnbSFTPRawSession.WaitPointer(const AFunc: TFunc<Pointer>): Pointer;
+begin
+  repeat
+    Result := AFunc();
+    if Result <> nil then Exit;
+    if (FSession = nil) or (ssh2_session_last_errno(FSession) <> LIBSSH2_ERROR_EAGAIN) then
+      Exit;
+    if IsCancelled then
+      raise EAbort.Create('SFTP operation cancelled');
+    WaitSocket(1000);
+  until False;
+end;
+
+procedure TnbSFTPRawSession.Connect;
+var
+  RC: Integer;
+  AnsiUser, AnsiPwd, AnsiPassphrase: AnsiString;
+  PassphrasePtr: PAnsiChar;
+begin
+  Disconnect;
+  EnsureSFTPLibLoaded;
+
+  FSocket := TTCPBlockSocket.Create;
+  FSocket.ConnectionTimeout := 10000;
+  FSocket.SetTimeout(10000);
+  FSocket.Connect(FInfo.Host, FInfo.Port);
+  if FSocket.LastError <> 0 then
+  begin
+    FLastError := 'TCP connect failed: ' + FSocket.LastErrorDesc;
+    raise Exception.Create(FLastError);
+  end;
+
+  FSession := ssh2_session_init_ex(nil, nil, nil, nil);
+  if FSession = nil then
+  begin
+    FLastError := 'libssh2_session_init failed';
+    raise Exception.Create(FLastError);
+  end;
+
+  RC := ssh2_session_handshake(FSession, FSocket.Socket);
+  if RC <> 0 then
+    raise Exception.Create('SSH handshake failed: ' + GetSessionError);
+
+  AnsiUser := AnsiString(FInfo.User);
+  AnsiPassphrase := AnsiString(FInfo.Passphrase);
+  if AnsiPassphrase = '' then PassphrasePtr := nil
+  else PassphrasePtr := PAnsiChar(AnsiPassphrase);
+
+  if Length(FInfo.KeyData) > 0 then
+    RC := ssh2_userauth_publickey_frommemory(FSession,
+      PAnsiChar(AnsiUser), Length(AnsiUser),
+      PAnsiChar(FInfo.PubKeyData), Length(FInfo.PubKeyData),
+      PAnsiChar(FInfo.KeyData), Length(FInfo.KeyData),
+      PassphrasePtr)
+  else if FInfo.Password <> '' then
+  begin
+    AnsiPwd := AnsiString(FInfo.Password);
+    RC := ssh2_userauth_password_ex(FSession, PAnsiChar(AnsiUser),
+      Length(AnsiUser), PAnsiChar(AnsiPwd), Length(AnsiPwd), nil);
+  end
+  else
+  begin
+    FLastError := 'No authentication method';
+    raise Exception.Create(FLastError);
+  end;
+
+  if RC <> 0 then
+    raise Exception.Create('Authentication failed: ' + GetSessionError);
+
+  FSocket.NonBlockMode := True;
+  ssh2_session_set_blocking(FSession, 0);
+  FSFTP := PLIBSSH2_SFTP(WaitPointer(
+    function: Pointer
+    begin
+      Result := ssh2_sftp_init(FSession);
+    end));
+  if FSFTP = nil then
+    raise Exception.Create('SFTP init failed: ' + GetSessionError);
+end;
+
+procedure TnbSFTPRawSession.Disconnect;
+begin
+  if FIsStreamingSession then
+  begin
+    AbortDisconnect;
+    Exit;
+  end;
+
+  if FSFTP <> nil then
+  begin
+    try
+      WaitResultFor(
+        function: Integer
+        begin
+          Result := ssh2_sftp_shutdown(FSFTP);
+        end, 1500);
+    except
+    end;
+    FSFTP := nil;
+  end;
+  if FSession <> nil then
+  begin
+    try
+      WaitResultFor(
+        function: Integer
+        begin
+          Result := ssh2_session_disconnect_ex(FSession,
+            LIBSSH2_DISCONNECT_BY_APPLICATION, 'bye', '');
+        end, 1500);
+    except
+    end;
+    try
+      WaitResultFor(
+        function: Integer
+        begin
+          Result := ssh2_session_free(FSession);
+        end, 1500);
+    except
+    end;
+    FSession := nil;
+  end;
+  FreeAndNil(FSocket);
+end;
+
+procedure TnbSFTPRawSession.AbortDisconnect;
+begin
+  if FSocket <> nil then
+  begin
+    try
+      FSocket.CloseSocket;
+    except
+    end;
+    FreeAndNil(FSocket);
+  end;
+  FSocket := nil;
+  FSFTP := nil;
+  FSession := nil;
+end;
+
+function TnbSFTPRawSession.StatSize(const ARemotePath: string): Int64;
+var
+  PathA: AnsiString;
+  Attrs: TLIBSSH2_SFTP_ATTRIBUTES;
+  RC: Integer;
+begin
+  PathA := ToUtf8Ansi(ARemotePath);
+  FillChar(Attrs, SizeOf(Attrs), 0);
+  RC := WaitResult(
+    function: Integer
+    begin
+      Result := ssh2_sftp_stat_ex(FSFTP, PAnsiChar(PathA), Length(PathA),
+        LIBSSH2_SFTP_STAT, @Attrs);
+    end);
+  if RC <> 0 then
+    raise Exception.Create('Remote stat failed: ' + GetSFTPError);
+  if (Attrs.flags and LIBSSH2_SFTP_ATTR_SIZE) = 0 then
+    Result := 0
+  else
+    Result := Attrs.filesize;
+end;
+
+function TnbSFTPRawSession.OpenRead(
+  const ARemotePath: string): PLIBSSH2_SFTP_HANDLE;
+var
+  PathA: AnsiString;
+begin
+  PathA := ToUtf8Ansi(ARemotePath);
+  Result := PLIBSSH2_SFTP_HANDLE(WaitPointer(
+    function: Pointer
+    begin
+      Result := ssh2_sftp_open_ex(FSFTP, PAnsiChar(PathA), Length(PathA),
+        LIBSSH2_FXF_READ, 0, LIBSSH2_SFTP_OPENFILE);
+    end));
+  if Result = nil then
+    raise Exception.Create('Open source file failed: ' + GetSFTPError);
+end;
+
+function TnbSFTPRawSession.OpenWrite(
+  const ARemotePath: string): PLIBSSH2_SFTP_HANDLE;
+var
+  PathA: AnsiString;
+begin
+  PathA := ToUtf8Ansi(ARemotePath);
+  Result := PLIBSSH2_SFTP_HANDLE(WaitPointer(
+    function: Pointer
+    begin
+      Result := ssh2_sftp_open_ex(FSFTP, PAnsiChar(PathA), Length(PathA),
+        LIBSSH2_FXF_WRITE or LIBSSH2_FXF_CREAT or LIBSSH2_FXF_TRUNC,
+        $1A4, LIBSSH2_SFTP_OPENFILE);
+    end));
+  if Result = nil then
+    raise Exception.Create('Open target file failed: ' + GetSFTPError);
+end;
+
+procedure TnbSFTPRawSession.CloseFile(var AHandle: PLIBSSH2_SFTP_HANDLE);
+var
+  Handle: PLIBSSH2_SFTP_HANDLE;
+begin
+  if AHandle = nil then Exit;
+  if FIsStreamingSession then
+  begin
+    AHandle := nil;
+    Exit;
+  end;
+
+  Handle := AHandle;
+  try
+    WaitResultFor(
+      function: Integer
+      begin
+        Result := ssh2_sftp_close_handle(Handle);
+      end, 1500);
+  except
+  end;
+  AHandle := nil;
+end;
+
+function TnbSFTPRawSession.Read(AHandle: PLIBSSH2_SFTP_HANDLE; var ABuffer;
+  ACount: NativeUInt): NativeInt;
+var
+  BufferPtr: PAnsiChar;
+begin
+  BufferPtr := PAnsiChar(@ABuffer);
+  Result := WaitResult(
+    function: Integer
+    begin
+      Result := ssh2_sftp_read(AHandle, BufferPtr, ACount);
+    end);
+  if Result < 0 then
+    raise Exception.Create('Read source file failed: ' + GetSFTPError);
+end;
+
+function TnbSFTPRawSession.Write(AHandle: PLIBSSH2_SFTP_HANDLE;
+  const ABuffer; ACount: NativeUInt): NativeInt;
+var
+  BufferPtr: PAnsiChar;
+begin
+  BufferPtr := PAnsiChar(@ABuffer);
+  Result := WaitResult(
+    function: Integer
+    begin
+      Result := ssh2_sftp_write(AHandle, BufferPtr, ACount);
+    end);
+  if Result < 0 then
+    raise Exception.Create('Write target file failed: ' + GetSFTPError);
 end;
 
 { TSFTPWorkerThread }
@@ -912,6 +1345,17 @@ procedure TnbSFTPClient.ClearPrivateKeyData;
 begin
   FKeyData := '';
   FPubKeyData := '';
+end;
+
+procedure TnbSFTPClient.ExportConnectionInfo(out AInfo: TnbSFTPConnectionInfo);
+begin
+  AInfo.Host := FHost;
+  AInfo.Port := FPort;
+  AInfo.User := FUser;
+  AInfo.Password := FPassword;
+  AInfo.Passphrase := FPassphrase;
+  AInfo.KeyData := FKeyData;
+  AInfo.PubKeyData := FPubKeyData;
 end;
 
 procedure TnbSFTPClient.QueueCommand(AKind: TSFTPCommandKind; const APath1,
