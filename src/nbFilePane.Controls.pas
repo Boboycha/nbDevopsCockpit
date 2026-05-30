@@ -251,4 +251,7 @@ begin
   PaintLocalChrome;
 end;
 
+initialization
+  RegisterFmxClasses([TnbToolButton]);
+
 end.
