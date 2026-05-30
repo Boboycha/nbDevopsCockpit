@@ -45,6 +45,7 @@ lib/Win64/
 # --- Логи сборки ---
 *.log
 src/dclnbDevOpsCockpit.res
+*.res
 
 # --- ОС ---
 Thumbs.db
