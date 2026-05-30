@@ -155,6 +155,9 @@ implementation
 uses
   System.Math, FMX.Dialogs, FMX.Forms;
 
+const
+  PARENT_ENTRY_TAG = -1;
+
 type
   TControlAccess = class(TControl);
 
@@ -529,10 +532,18 @@ begin
 end;
 
 procedure TnbFilePane.EnsureSelectedVisible;
+var
+  ItemIndex: Integer;
 begin
-  if (FSelectedIndex < 0) or (FList = nil)
-    or (FSelectedIndex >= FList.Count) then Exit;
-  FList.ScrollToItem(FList.ListItems[FSelectedIndex]);
+  if FList = nil then Exit;
+  if FSelectedIndex = PARENT_ENTRY_TAG then
+    ItemIndex := 0
+  else if FSelectedIndex >= 0 then
+    ItemIndex := FSelectedIndex + 1
+  else
+    Exit;
+  if ItemIndex >= FList.Count then Exit;
+  FList.ScrollToItem(FList.ListItems[ItemIndex]);
 end;
 
 procedure TnbFilePane.KeyDown(var Key: Word; var KeyChar: WideChar;
@@ -544,15 +555,26 @@ begin
   case Key of
     vkUp:
       begin
-        if FSelectedIndex < 0 then
+        if FSelectedIndex = PARENT_ENTRY_TAG then
           SelectIndex(0)
+        else if FSelectedIndex < 0 then
+          SelectIndex(0)
+        else if FSelectedIndex = 0 then
+        begin
+          FSelectedIndex := PARENT_ENTRY_TAG;
+          UpdateRowSelection;
+          if FList <> nil then
+            FList.ScrollToItem(FList.ListItems[0]);
+        end
         else
           SelectIndex(FSelectedIndex - 1);
         Key := 0;
       end;
     vkDown:
       begin
-        if FSelectedIndex < 0 then
+        if FSelectedIndex = PARENT_ENTRY_TAG then
+          SelectIndex(0)
+        else if FSelectedIndex < 0 then
           SelectIndex(0)
         else
           SelectIndex(FSelectedIndex + 1);
@@ -560,7 +582,9 @@ begin
       end;
     vkReturn:
       begin
-        if SelectedEntry(Entry) and Entry.IsDir and (FSource <> nil) then
+        if (FSelectedIndex = PARENT_ENTRY_TAG) and (FSource <> nil) then
+          Navigate(FSource.ParentDir(FPath))
+        else if SelectedEntry(Entry) and Entry.IsDir and (FSource <> nil) then
           Navigate(FSource.Combine(FPath, Entry.Name));
         Key := 0;
       end;
@@ -580,138 +604,154 @@ var
   RowBg, Line: TRectangle;
   Row, NameCell, TextStack: TLayout;
   Icon, NameText, DetailText, DateText, SizeText: TLabel;
+
+  procedure AddRow(const AEntry: TnbFileEntry; ATag: Integer);
+  begin
+    Item := TListBoxItem.Create(FList);
+    Item.Parent := FList;
+    Item.Height := FILE_ROW_HEIGHT;
+    Item.Tag := ATag;
+    Item.Text := '';
+    Item.StyleLookup := ScopedStyle('listboxitemstyle');
+    Item.StyledSettings := Item.StyledSettings - [TStyledSetting.FontColor];
+    Item.TextSettings.FontColor := FColText;
+    Item.TextSettings.HorzAlign := TTextAlign.Leading;
+    Item.TextSettings.VertAlign := TTextAlign.Center;
+    Item.HitTest := True;
+    Item.Selectable := True;
+    Item.OnMouseDown := HandleRowMouseDown;
+    Item.OnMouseMove := HandleRowMouseMove;
+    Item.OnMouseUp := HandleRowMouseUp;
+    Item.OnDblClick := HandleRowDblClick;
+    Item.OnDragEnd := HandleDragEnd;
+    Item.OnDragOver := HandleDragOver;
+    Item.OnDragDrop := HandleDragDrop;
+    Item.DragMode := TDragMode.dmManual;
+
+    RowBg := TRectangle.Create(Item);
+    RowBg.Parent := Item;
+    RowBg.Align := TAlignLayout.Contents;
+    RowBg.StyleName := 'file-row-bg';
+    RowBg.HitTest := False;
+    RowBg.Fill.Color := FColBg;
+    RowBg.Stroke.Kind := TBrushKind.None;
+    RowBg.SendToBack;
+
+    Row := TLayout.Create(Item);
+    Row.Parent := Item;
+    Row.Align := TAlignLayout.Client;
+    Row.Margins.Rect := RectF(0, 0, 0, 0);
+    Row.HitTest := False;
+
+    SizeText := TLabel.Create(Row);
+    SizeText.Parent := Row;
+    SizeText.Align := TAlignLayout.Right;
+    SizeText.Width := FILE_COL_SIZE_WIDTH;
+    SizeText.Margins.Rect := RectF(6, 0, 8, 0);
+    SizeText.HitTest := False;
+    if ATag = PARENT_ENTRY_TAG then
+      SizeText.Text := ''
+    else if AEntry.IsDir then
+      SizeText.Text := '--'
+    else
+      SizeText.Text := FormatFileSize(AEntry.Size);
+    SizeText.StyledSettings := SizeText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
+    SizeText.TextSettings.FontColor := FColMuted;
+    SizeText.TextSettings.Font.Size := 11;
+    SizeText.TextSettings.VertAlign := TTextAlign.Center;
+    SizeText.TextSettings.HorzAlign := TTextAlign.Trailing;
+
+    DateText := TLabel.Create(Row);
+    DateText.Parent := Row;
+    DateText.Align := TAlignLayout.Right;
+    DateText.Width := FILE_COL_DATE_WIDTH;
+    DateText.Margins.Rect := RectF(6, 0, 12, 0);
+    DateText.HitTest := False;
+    if ATag = PARENT_ENTRY_TAG then
+      DateText.Text := ''
+    else
+      DateText.Text := FormatFileModified(AEntry.Modified);
+    DateText.StyledSettings := DateText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
+    DateText.TextSettings.FontColor := FColMuted;
+    DateText.TextSettings.Font.Size := 11;
+    DateText.TextSettings.VertAlign := TTextAlign.Center;
+    DateText.TextSettings.HorzAlign := TTextAlign.Trailing;
+
+    NameCell := TLayout.Create(Row);
+    NameCell.Parent := Row;
+    NameCell.Align := TAlignLayout.Client;
+    NameCell.HitTest := False;
+
+    Icon := TLabel.Create(NameCell);
+    Icon.Parent := NameCell;
+    Icon.Align := TAlignLayout.Left;
+    Icon.Width := 32;
+    Icon.Margins.Rect := RectF(8, 0, 0, 0);
+    Icon.HitTest := False;
+    Icon.Text := FILE_ICON_FOLDER;
+    if not AEntry.IsDir then
+      Icon.Text := FILE_ICON_DOCUMENT;
+    Icon.StyledSettings := Icon.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Family, TStyledSetting.Size];
+    Icon.TextSettings.Font.Family := FILE_ICON_FONT;
+    Icon.TextSettings.Font.Size := 17;
+    Icon.TextSettings.FontColor := FColAccent;
+    Icon.TextSettings.VertAlign := TTextAlign.Center;
+    Icon.TextSettings.HorzAlign := TTextAlign.Center;
+
+    TextStack := TLayout.Create(NameCell);
+    TextStack.Parent := NameCell;
+    TextStack.Align := TAlignLayout.Client;
+    TextStack.Margins.Rect := RectF(0, 4, 8, 3);
+    TextStack.HitTest := False;
+
+    NameText := TLabel.Create(TextStack);
+    NameText.Parent := TextStack;
+    NameText.Align := TAlignLayout.Top;
+    NameText.Height := 18;
+    NameText.HitTest := False;
+    NameText.Text := AEntry.Name;
+    NameText.StyledSettings := NameText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size, TStyledSetting.Style];
+    NameText.TextSettings.FontColor := FColText;
+    NameText.TextSettings.Font.Size := 12;
+    NameText.TextSettings.Font.Style := [TFontStyle.fsBold];
+    NameText.TextSettings.VertAlign := TTextAlign.Center;
+    NameText.TextSettings.HorzAlign := TTextAlign.Leading;
+
+    DetailText := TLabel.Create(TextStack);
+    DetailText.Parent := TextStack;
+    DetailText.Align := TAlignLayout.Client;
+    DetailText.HitTest := False;
+    if ATag = PARENT_ENTRY_TAG then
+      DetailText.Text := 'parent folder'
+    else
+      DetailText.Text := FormatFilePermissions(AEntry.Permissions, AEntry.IsDir);
+    DetailText.StyledSettings := DetailText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
+    DetailText.TextSettings.FontColor := FColMuted;
+    DetailText.TextSettings.Font.Size := 9;
+    DetailText.TextSettings.VertAlign := TTextAlign.Leading;
+    DetailText.TextSettings.HorzAlign := TTextAlign.Leading;
+
+    Line := TRectangle.Create(Item);
+    Line.Parent := Item;
+    Line.Align := TAlignLayout.Bottom;
+    Line.Height := 1;
+    Line.HitTest := False;
+    Line.Fill.Color := TAlphaColor($18000000) or (FColBorder and $00FFFFFF);
+    Line.Stroke.Kind := TBrushKind.None;
+  end;
 begin
   FList.BeginUpdate;
   try
     FList.Clear;
+    Entry := Default(TnbFileEntry);
+    Entry.Name := '..';
+    Entry.IsDir := True;
+    AddRow(Entry, PARENT_ENTRY_TAG);
+
     for I := 0 to High(FEntries) do
     begin
       Entry := FEntries[I];
-
-      Item := TListBoxItem.Create(FList);
-      Item.Parent := FList;
-      Item.Height := FILE_ROW_HEIGHT;
-      Item.Tag := I;
-      Item.Text := '';
-      Item.StyleLookup := ScopedStyle('listboxitemstyle');
-      Item.StyledSettings := Item.StyledSettings - [TStyledSetting.FontColor];
-      Item.TextSettings.FontColor := FColText;
-      Item.TextSettings.HorzAlign := TTextAlign.Leading;
-      Item.TextSettings.VertAlign := TTextAlign.Center;
-      Item.HitTest := True;
-      Item.Selectable := True;
-      Item.OnMouseDown := HandleRowMouseDown;
-      Item.OnMouseMove := HandleRowMouseMove;
-      Item.OnMouseUp := HandleRowMouseUp;
-      Item.OnDblClick := HandleRowDblClick;
-      Item.OnDragEnd := HandleDragEnd;
-      Item.OnDragOver := HandleDragOver;
-      Item.OnDragDrop := HandleDragDrop;
-      Item.DragMode := TDragMode.dmManual;
-
-      RowBg := TRectangle.Create(Item);
-      RowBg.Parent := Item;
-      RowBg.Align := TAlignLayout.Contents;
-      RowBg.StyleName := 'file-row-bg';
-      RowBg.HitTest := False;
-      RowBg.Fill.Color := FColBg;
-      RowBg.Stroke.Kind := TBrushKind.None;
-      RowBg.SendToBack;
-
-      Row := TLayout.Create(Item);
-      Row.Parent := Item;
-      Row.Align := TAlignLayout.Client;
-      Row.Margins.Rect := RectF(0, 0, 0, 0);
-      Row.HitTest := False;
-
-      SizeText := TLabel.Create(Row);
-      SizeText.Parent := Row;
-      SizeText.Align := TAlignLayout.Right;
-      SizeText.Width := FILE_COL_SIZE_WIDTH;
-      SizeText.Margins.Rect := RectF(6, 0, 8, 0);
-      SizeText.HitTest := False;
-      if Entry.IsDir then
-        SizeText.Text := '--'
-      else
-        SizeText.Text := FormatFileSize(Entry.Size);
-      SizeText.StyledSettings := SizeText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
-      SizeText.TextSettings.FontColor := FColMuted;
-      SizeText.TextSettings.Font.Size := 11;
-      SizeText.TextSettings.VertAlign := TTextAlign.Center;
-      SizeText.TextSettings.HorzAlign := TTextAlign.Trailing;
-
-      DateText := TLabel.Create(Row);
-      DateText.Parent := Row;
-      DateText.Align := TAlignLayout.Right;
-      DateText.Width := FILE_COL_DATE_WIDTH;
-      DateText.Margins.Rect := RectF(6, 0, 12, 0);
-      DateText.HitTest := False;
-      DateText.Text := FormatFileModified(Entry.Modified);
-      DateText.StyledSettings := DateText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
-      DateText.TextSettings.FontColor := FColMuted;
-      DateText.TextSettings.Font.Size := 11;
-      DateText.TextSettings.VertAlign := TTextAlign.Center;
-      DateText.TextSettings.HorzAlign := TTextAlign.Trailing;
-
-      NameCell := TLayout.Create(Row);
-      NameCell.Parent := Row;
-      NameCell.Align := TAlignLayout.Client;
-      NameCell.HitTest := False;
-
-      Icon := TLabel.Create(NameCell);
-      Icon.Parent := NameCell;
-      Icon.Align := TAlignLayout.Left;
-      Icon.Width := 32;
-      Icon.Margins.Rect := RectF(8, 0, 0, 0);
-      Icon.HitTest := False;
-      if Entry.IsDir then
-        Icon.Text := FILE_ICON_FOLDER
-      else
-        Icon.Text := FILE_ICON_DOCUMENT;
-      Icon.StyledSettings := Icon.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Family, TStyledSetting.Size];
-      Icon.TextSettings.Font.Family := FILE_ICON_FONT;
-      Icon.TextSettings.Font.Size := 17;
-      Icon.TextSettings.FontColor := FColAccent;
-      Icon.TextSettings.VertAlign := TTextAlign.Center;
-      Icon.TextSettings.HorzAlign := TTextAlign.Center;
-
-      TextStack := TLayout.Create(NameCell);
-      TextStack.Parent := NameCell;
-      TextStack.Align := TAlignLayout.Client;
-      TextStack.Margins.Rect := RectF(0, 4, 8, 3);
-      TextStack.HitTest := False;
-
-      NameText := TLabel.Create(TextStack);
-      NameText.Parent := TextStack;
-      NameText.Align := TAlignLayout.Top;
-      NameText.Height := 18;
-      NameText.HitTest := False;
-      NameText.Text := Entry.Name;
-      NameText.StyledSettings := NameText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size, TStyledSetting.Style];
-      NameText.TextSettings.FontColor := FColText;
-      NameText.TextSettings.Font.Size := 12;
-      NameText.TextSettings.Font.Style := [TFontStyle.fsBold];
-      NameText.TextSettings.VertAlign := TTextAlign.Center;
-      NameText.TextSettings.HorzAlign := TTextAlign.Leading;
-
-      DetailText := TLabel.Create(TextStack);
-      DetailText.Parent := TextStack;
-      DetailText.Align := TAlignLayout.Client;
-      DetailText.HitTest := False;
-      DetailText.Text := FormatFilePermissions(Entry.Permissions, Entry.IsDir);
-      DetailText.StyledSettings := DetailText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
-      DetailText.TextSettings.FontColor := FColMuted;
-      DetailText.TextSettings.Font.Size := 9;
-      DetailText.TextSettings.VertAlign := TTextAlign.Leading;
-      DetailText.TextSettings.HorzAlign := TTextAlign.Leading;
-
-      Line := TRectangle.Create(Item);
-      Line.Parent := Item;
-      Line.Align := TAlignLayout.Bottom;
-      Line.Height := 1;
-      Line.HitTest := False;
-      Line.Fill.Color := TAlphaColor($18000000) or (FColBorder and $00FFFFFF);
-      Line.Stroke.Kind := TBrushKind.None;
+      AddRow(Entry, I);
     end;
   finally
     FList.EndUpdate;
@@ -823,6 +863,7 @@ var
 begin
   Result := False;
   Idx := FSelectedIndex;
+  if Idx = PARENT_ENTRY_TAG then Exit;
   if (Idx < 0) or (Idx > High(FEntries)) then Exit;
   AEntry := FEntries[Idx];
   Result := True;
@@ -853,6 +894,12 @@ var
   Entry: TnbFileEntry;
 begin
   SelectRowFromObject(Sender);
+  if FSelectedIndex = PARENT_ENTRY_TAG then
+  begin
+    if FSource <> nil then
+      Navigate(FSource.ParentDir(FPath));
+    Exit;
+  end;
   if not SelectedEntry(Entry) then Exit;
   if Entry.IsDir and (FSource <> nil) then
     Navigate(FSource.Combine(FPath, Entry.Name));
@@ -870,6 +917,12 @@ begin
   FDragArmed := False;
   FDragging := False;
   SelectRowFromObject(Sender);
+  if FSelectedIndex = PARENT_ENTRY_TAG then
+  begin
+    if Assigned(FOnActivated) then
+      FOnActivated(Self);
+    Exit;
+  end;
   if (Button = TMouseButton.mbLeft) and SelectedEntry(Entry)
     and (not Entry.IsDir) then
   begin
@@ -983,13 +1036,16 @@ end;
 procedure TnbFilePane.SelectRowFromObject(AObject: TObject);
 var
   Obj: TFmxObject;
+  TagValue: NativeInt;
 begin
   if AObject is TFmxObject then
   begin
     Obj := TFmxObject(AObject);
-    FSelectedIndex := Obj.Tag;
-    if (FList <> nil) and (FSelectedIndex >= 0) and (FSelectedIndex < FList.Count) then
-      FList.ItemIndex := FSelectedIndex;
+    TagValue := Obj.Tag;
+    if TagValue = PARENT_ENTRY_TAG then
+      FSelectedIndex := PARENT_ENTRY_TAG
+    else
+      FSelectedIndex := EnsureRange(TagValue, 0, High(FEntries));
   end;
   UpdateRowSelection;
 end;
@@ -1002,7 +1058,6 @@ var
   RowBg: TRectangle;
 begin
   if FList = nil then Exit;
-  FList.ItemIndex := FSelectedIndex;
   for I := 0 to FList.Count - 1 do
   begin
     Item := FList.ListItems[I];

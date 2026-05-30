@@ -62,6 +62,9 @@ type
     stream_id: Integer; buf: PAnsiChar; buflen: NativeUInt): NativeInt; cdecl;
   Tlibssh2_channel_write_ex = function(channel: PLIBSSH2_CHANNEL;
     stream_id: Integer; buf: PAnsiChar; buflen: NativeUInt): NativeInt; cdecl;
+  Tlibssh2_channel_send_eof = function(channel: PLIBSSH2_CHANNEL): Integer; cdecl;
+  Tlibssh2_channel_wait_closed = function(channel: PLIBSSH2_CHANNEL): Integer; cdecl;
+  Tlibssh2_channel_get_exit_status = function(channel: PLIBSSH2_CHANNEL): Integer; cdecl;
   Tlibssh2_channel_close = function(channel: PLIBSSH2_CHANNEL): Integer; cdecl;
   Tlibssh2_channel_free = function(channel: PLIBSSH2_CHANNEL): Integer; cdecl;
   Tlibssh2_channel_eof = function(channel: PLIBSSH2_CHANNEL): Integer; cdecl;
@@ -97,6 +100,9 @@ var
   ssh2_channel_setenv_ex: Tlibssh2_channel_setenv_ex = nil;
   ssh2_channel_read_ex: Tlibssh2_channel_read_ex = nil;
   ssh2_channel_write_ex: Tlibssh2_channel_write_ex = nil;
+  ssh2_channel_send_eof: Tlibssh2_channel_send_eof = nil;
+  ssh2_channel_wait_closed: Tlibssh2_channel_wait_closed = nil;
+  ssh2_channel_get_exit_status: Tlibssh2_channel_get_exit_status = nil;
   ssh2_channel_close: Tlibssh2_channel_close = nil;
   ssh2_channel_free: Tlibssh2_channel_free = nil;
   ssh2_channel_eof: Tlibssh2_channel_eof = nil;
@@ -222,6 +228,9 @@ begin
   @ssh2_channel_request_pty_ex        := ResolveProc('libssh2_channel_request_pty_ex');
   @ssh2_channel_read_ex               := ResolveProc('libssh2_channel_read_ex');
   @ssh2_channel_write_ex              := ResolveProc('libssh2_channel_write_ex');
+  @ssh2_channel_send_eof              := ResolveProc('libssh2_channel_send_eof');
+  @ssh2_channel_wait_closed           := ResolveProc('libssh2_channel_wait_closed');
+  @ssh2_channel_get_exit_status       := ResolveProc('libssh2_channel_get_exit_status');
   @ssh2_channel_close                 := ResolveProc('libssh2_channel_close');
   @ssh2_channel_free                  := ResolveProc('libssh2_channel_free');
   @ssh2_channel_eof                   := ResolveProc('libssh2_channel_eof');

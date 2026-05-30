@@ -82,6 +82,7 @@ type
       ACount: NativeUInt): NativeInt;
     function Write(AHandle: PLIBSSH2_SFTP_HANDLE; const ABuffer;
       ACount: NativeUInt): NativeInt;
+    procedure DeleteFile(const ARemotePath: string);
 
     property LastError: string read FLastError;
   end;
@@ -793,6 +794,19 @@ begin
     end);
   if Result < 0 then
     raise Exception.Create('Write target file failed: ' + GetSFTPError);
+end;
+
+procedure TnbSFTPRawSession.DeleteFile(const ARemotePath: string);
+var
+  PathA: AnsiString;
+begin
+  PathA := ToUtf8Ansi(ARemotePath);
+  if WaitResult(
+    function: Integer
+    begin
+      Result := ssh2_sftp_unlink_ex(FSFTP, PAnsiChar(PathA), Length(PathA));
+    end) <> 0 then
+    raise Exception.Create('Delete remote file failed: ' + GetSFTPError);
 end;
 
 { TSFTPWorkerThread }
