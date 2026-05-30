@@ -1,0 +1,17 @@
+package dclnbFilePane;
+
+{$R *.res}
+{$DESCRIPTION 'nb File Pane - design-time registration'}
+{$DESIGNONLY}
+{$IMPLICITBUILD ON}
+
+requires
+  rtl,
+  fmx,
+  DesignIDE,
+  nbFilePanePkg;
+
+contains
+  Reg_nbFilePane in 'Reg_nbFilePane.pas';
+
+end.

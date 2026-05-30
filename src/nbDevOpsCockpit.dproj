@@ -207,8 +207,8 @@
         <DCCReference Include="fmx.dcp"/>
         <DCCReference Include="Skia.Package.RTL.dcp"/>
         <DCCReference Include="Skia.Package.FMX.dcp"/>
-        <DCCReference Include="nbSSH.LibSSH2.pas"/>
-        <DCCReference Include="nbSSH.KeyValidation.pas"/>
+        <DCCReference Include="nbSSHPkg.dcp"/>
+        <DCCReference Include="nbFilePanePkg.dcp"/>
         <DCCReference Include="ModernSSHClient.pas"/>
         <DCCReference Include="Terminal.Types.pas"/>
         <DCCReference Include="Terminal.Theme.pas"/>
@@ -219,11 +219,6 @@
         <DCCReference Include="Terminal.Clipboard.pas"/>
         <DCCReference Include="Terminal.SSHBridge.pas"/>
         <DCCReference Include="Terminal.Control.pas"/>
-        <DCCReference Include="nbFileSources.pas"/>
-        <DCCReference Include="nbFilePane.Controls.pas"/>
-        <DCCReference Include="nbSFTPClient.pas"/>
-        <DCCReference Include="nbSFTPTransfer.pas"/>
-        <DCCReference Include="nbFilePane.pas"/>
         <DCCReference Include="GoghThemeLoader.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

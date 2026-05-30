@@ -3,6 +3,15 @@
         <ProjectGuid>{CD210ECB-B844-43C7-8AFC-C5B67E4D4E41}</ProjectGuid>
     </PropertyGroup>
     <ItemGroup>
+        <Projects Include="src\nbSSHPkg.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="src\nbFilePanePkg.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="src\dclnbFilePane.dproj">
+            <Dependencies/>
+        </Projects>
         <Projects Include="src\nbDevOpsCockpit.dproj">
             <Dependencies/>
         </Projects>
@@ -20,6 +29,33 @@
             <Default.Personality/>
         </BorlandProject>
     </ProjectExtensions>
+    <Target Name="nbSSHPkg">
+        <MSBuild Projects="src\nbSSHPkg.dproj"/>
+    </Target>
+    <Target Name="nbSSHPkg:Clean">
+        <MSBuild Projects="src\nbSSHPkg.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="nbSSHPkg:Make">
+        <MSBuild Projects="src\nbSSHPkg.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="nbFilePanePkg">
+        <MSBuild Projects="src\nbFilePanePkg.dproj"/>
+    </Target>
+    <Target Name="nbFilePanePkg:Clean">
+        <MSBuild Projects="src\nbFilePanePkg.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="nbFilePanePkg:Make">
+        <MSBuild Projects="src\nbFilePanePkg.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="dclnbFilePane">
+        <MSBuild Projects="src\dclnbFilePane.dproj"/>
+    </Target>
+    <Target Name="dclnbFilePane:Clean">
+        <MSBuild Projects="src\dclnbFilePane.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="dclnbFilePane:Make">
+        <MSBuild Projects="src\dclnbFilePane.dproj" Targets="Make"/>
+    </Target>
     <Target Name="nbDevOpsCockpit">
         <MSBuild Projects="src\nbDevOpsCockpit.dproj"/>
     </Target>
@@ -48,13 +84,13 @@
         <MSBuild Projects="..\nbFleet\nbFleet.dproj" Targets="Make"/>
     </Target>
     <Target Name="Build">
-        <CallTarget Targets="nbDevOpsCockpit;nbDevOpsCockpitDemo;nbFleet"/>
+        <CallTarget Targets="nbSSHPkg;nbFilePanePkg;dclnbFilePane;nbDevOpsCockpit;nbDevOpsCockpitDemo;nbFleet"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="nbDevOpsCockpit:Clean;nbDevOpsCockpitDemo:Clean;nbFleet:Clean"/>
+        <CallTarget Targets="nbSSHPkg:Clean;nbFilePanePkg:Clean;dclnbFilePane:Clean;nbDevOpsCockpit:Clean;nbDevOpsCockpitDemo:Clean;nbFleet:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="nbDevOpsCockpit:Make;nbDevOpsCockpitDemo:Make;nbFleet:Make"/>
+        <CallTarget Targets="nbSSHPkg:Make;nbFilePanePkg:Make;dclnbFilePane:Make;nbDevOpsCockpit:Make;nbDevOpsCockpitDemo:Make;nbFleet:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

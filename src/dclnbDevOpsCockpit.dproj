@@ -155,6 +155,7 @@
         <DCCReference Include="fmx.dcp"/>
         <DCCReference Include="DesignIDE.dcp"/>
         <DCCReference Include="nbDevOpsCockpit.dcp"/>
+        <DCCReference Include="Reg_nbDevOpsCockpit.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

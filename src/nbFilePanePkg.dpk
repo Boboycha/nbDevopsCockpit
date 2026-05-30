@@ -1,0 +1,20 @@
+package nbFilePanePkg;
+
+{$R *.res}
+{$DESCRIPTION 'nb File Pane - runtime components'}
+{$RUNONLY}
+{$IMPLICITBUILD ON}
+
+requires
+  rtl,
+  fmx,
+  nbSSHPkg;
+
+contains
+  nbFileSources in 'nbFileSources.pas',
+  nbFilePane.Controls in 'nbFilePane.Controls.pas',
+  nbSFTPClient in 'nbSFTPClient.pas',
+  nbSFTPTransfer in 'nbSFTPTransfer.pas',
+  nbFilePane in 'nbFilePane.pas';
+
+end.

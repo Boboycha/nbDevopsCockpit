@@ -18,15 +18,12 @@ uses
   FMX.Types,
   DesignIntf,
   ModernSSHClient,
-  Terminal.Control,
-  nbFilePane.Controls,
-  nbFilePane;
+  Terminal.Control;
 
 const
   PaletteName = 'nb DevOps';
   SshCategory = 'nb DevOps SSH';
   TerminalCategory = 'nb DevOps Terminal';
-  FilePaneCategory = 'nb DevOps File Pane';
   TerminalBehaviorCategory = 'nb DevOps Behavior';
   DevOpsEventsCategory = 'nb DevOps Events';
 
@@ -81,42 +78,20 @@ begin
   ]);
 end;
 
-procedure RegisterFilePaneDesignTime;
-begin
-  RegisterPropertiesInCategory(FilePaneCategory, TnbFilePane, [
-    'Align',
-    'Anchors',
-    'Margins',
-    'Padding',
-    'TabStop'
-  ]);
-
-  RegisterPropertiesInCategory(DevOpsEventsCategory, TnbFilePane, [
-    'OnTransfer',
-    'OnActivated',
-    'OnError',
-    'OnFileDrop'
-  ]);
-end;
-
 procedure Register;
 begin
   RegisterFmxClasses([
     TnbSSHClient,
-    TnbTerminalControl,
-    TnbToolButton,
-    TnbFilePane
+    TnbTerminalControl
   ]);
 
   RegisterComponents(PaletteName, [
     TnbSSHClient,
-    TnbTerminalControl,
-    TnbFilePane
+    TnbTerminalControl
   ]);
 
   RegisterSSHDesignTime;
   RegisterTerminalDesignTime;
-  RegisterFilePaneDesignTime;
 end;
 
 end.

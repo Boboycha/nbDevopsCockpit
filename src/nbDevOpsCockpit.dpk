@@ -33,11 +33,11 @@ requires
   rtl,
   fmx,
   Skia.Package.RTL,
-  Skia.Package.FMX;
+  Skia.Package.FMX,
+  nbSSHPkg,
+  nbFilePanePkg;
 
 contains
-  nbSSH.LibSSH2 in 'nbSSH.LibSSH2.pas',
-  nbSSH.KeyValidation in 'nbSSH.KeyValidation.pas',
   ModernSSHClient in 'ModernSSHClient.pas',
   Terminal.Types in 'Terminal.Types.pas',
   Terminal.Theme in 'Terminal.Theme.pas',
@@ -48,11 +48,6 @@ contains
   Terminal.Clipboard in 'Terminal.Clipboard.pas',
   Terminal.SSHBridge in 'Terminal.SSHBridge.pas',
   Terminal.Control in 'Terminal.Control.pas',
-  nbFileSources in 'nbFileSources.pas',
-  nbFilePane.Controls in 'nbFilePane.Controls.pas',
-  nbSFTPClient in 'nbSFTPClient.pas',
-  nbSFTPTransfer in 'nbSFTPTransfer.pas',
-  nbFilePane in 'nbFilePane.pas',
   GoghThemeLoader in 'GoghThemeLoader.pas';
 
 (*По мере роста добавлять сюда новые юниты:
