@@ -123,7 +123,7 @@
         <DCC_DcpOutput>..\bin\$(Platform)\$(Config)</DCC_DcpOutput>
         <DCC_BplOutput>..\bin\$(Platform)\$(Config)</DCC_BplOutput>
         <DCC_DcuOutput>..\dcu\$(Platform)\$(Config)</DCC_DcuOutput>
-        <DCC_UnitSearchPath>Z:\VCL\synapse;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_UnitSearchPath>..\bin\$(Platform)\$(Config);Z:\VCL\synapse;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Android)'!=''">
         <VerInfo_Keys>package=com.embarcadero.$(MSBuildProjectName);label=$(MSBuildProjectName);versionCode=1;versionName=1.0.0;persistent=False;restoreAnyVersion=False;installLocation=auto;largeHeap=False;theme=TitleBar;hardwareAccelerated=true;apiKey=;minSdkVersion=23;targetSdkVersion=36</VerInfo_Keys>
