@@ -79,7 +79,7 @@ type
 implementation
 
 const
-  STREAM_BUFFER_SIZE = 32 * 1024;
+  STREAM_BUFFER_SIZE = 1024 * 1024;
 
 function TraceTick: UInt64;
 begin
