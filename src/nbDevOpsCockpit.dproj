@@ -115,12 +115,12 @@
         <GenPackage>true</GenPackage>
         <SanitizedProjectName>nbDevOpsCockpit</SanitizedProjectName>
         <DCC_Description>nb DevOps Cockpit - components for DevOps tooling (SSH, GitLab, etc.)</DCC_Description>
-        <RuntimeOnlyPackage>true</RuntimeOnlyPackage>
-        <DesignOnlyPackage>false</DesignOnlyPackage>
+        <RuntimeOnlyPackage>false</RuntimeOnlyPackage>
+        <DesignOnlyPackage>true</DesignOnlyPackage>
         <VerInfo_Locale>1049</VerInfo_Locale>
         <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductName=;ProductVersion=1.0.0.0;Comments=;CFBundleName=</VerInfo_Keys>
         <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;REST.Authenticator.OAuth.WebForm;Winapi;$(DCC_Namespace)</DCC_Namespace>
-        <DCC_DcpOutput>..\bin\$(Platform)\$(Config)</DCC_DcpOutput>
+        <DCC_DcpOutput>..\bin\dpk\$(Platform)\$(Config)</DCC_DcpOutput>
         <DCC_BplOutput>..\bin\$(Platform)\$(Config)</DCC_BplOutput>
         <DCC_DcuOutput>..\dcu\$(Platform)\$(Config)</DCC_DcuOutput>
         <DCC_UnitSearchPath>..\bin\$(Platform)\$(Config);Z:\VCL\synapse;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
@@ -196,7 +196,6 @@
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <VerInfo_Locale>1033</VerInfo_Locale>
         <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
-        <DCC_DcpOutput>..\bin\dpk\$(Platform)\$(Config)</DCC_DcpOutput>
         <DCC_DcuOutput>..\bin\dcu\$(Platform)\$(Config)</DCC_DcuOutput>
     </PropertyGroup>
     <ItemGroup>
@@ -205,10 +204,16 @@
         </DelphiCompile>
         <DCCReference Include="rtl.dcp"/>
         <DCCReference Include="fmx.dcp"/>
+        <DCCReference Include="DesignIDE.dcp"/>
         <DCCReference Include="Skia.Package.RTL.dcp"/>
         <DCCReference Include="Skia.Package.FMX.dcp"/>
-        <DCCReference Include="nbSSHPkg.dcp"/>
-        <DCCReference Include="nbFilePanePkg.dcp"/>
+        <DCCReference Include="nbSSH.LibSSH2.pas"/>
+        <DCCReference Include="nbSSH.KeyValidation.pas"/>
+        <DCCReference Include="nbFileSources.pas"/>
+        <DCCReference Include="nbFilePane.Controls.pas"/>
+        <DCCReference Include="nbSFTPClient.pas"/>
+        <DCCReference Include="nbSFTPTransfer.pas"/>
+        <DCCReference Include="nbFilePane.pas"/>
         <DCCReference Include="ModernSSHClient.pas"/>
         <DCCReference Include="Terminal.Types.pas"/>
         <DCCReference Include="Terminal.Theme.pas"/>
@@ -220,6 +225,7 @@
         <DCCReference Include="Terminal.SSHBridge.pas"/>
         <DCCReference Include="Terminal.Control.pas"/>
         <DCCReference Include="GoghThemeLoader.pas"/>
+        <DCCReference Include="Reg_nbDevOpsCockpit.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

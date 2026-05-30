@@ -18,7 +18,9 @@ uses
   FMX.Types,
   DesignIntf,
   ModernSSHClient,
-  Terminal.Control;
+  Terminal.Control,
+  nbFilePane.Controls,
+  nbFilePane;
 
 const
   PaletteName = 'nb DevOps';
@@ -26,6 +28,8 @@ const
   TerminalCategory = 'nb DevOps Terminal';
   TerminalBehaviorCategory = 'nb DevOps Behavior';
   DevOpsEventsCategory = 'nb DevOps Events';
+  FilePaneCategory = 'nb DevOps File Pane';
+  FilePaneEventsCategory = 'nb DevOps File Pane Events';
 
 procedure RegisterSSHDesignTime;
 begin
@@ -78,20 +82,42 @@ begin
   ]);
 end;
 
+procedure RegisterFilePaneDesignTime;
+begin
+  RegisterPropertiesInCategory(FilePaneCategory, TnbFilePane, [
+    'Align',
+    'Anchors',
+    'Margins',
+    'Padding',
+    'TabStop'
+  ]);
+
+  RegisterPropertiesInCategory(FilePaneEventsCategory, TnbFilePane, [
+    'OnTransfer',
+    'OnActivated',
+    'OnError',
+    'OnFileDrop'
+  ]);
+end;
+
 procedure Register;
 begin
   RegisterFmxClasses([
     TnbSSHClient,
-    TnbTerminalControl
+    TnbTerminalControl,
+    TnbFilePane,
+    TnbToolButton
   ]);
 
   RegisterComponents(PaletteName, [
     TnbSSHClient,
-    TnbTerminalControl
+    TnbTerminalControl,
+    TnbFilePane
   ]);
 
   RegisterSSHDesignTime;
   RegisterTerminalDesignTime;
+  RegisterFilePaneDesignTime;
 end;
 
 end.
