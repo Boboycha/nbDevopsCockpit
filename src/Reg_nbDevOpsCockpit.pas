@@ -19,6 +19,7 @@ uses
   DesignIntf,
   ModernSSHClient,
   Terminal.Control,
+  nbFilePane.Controls,
   nbFilePane;
 
 const
@@ -103,6 +104,7 @@ begin
   RegisterFmxClasses([
     TnbSSHClient,
     TnbTerminalControl,
+    TnbToolButton,
     TnbFilePane
   ]);
 

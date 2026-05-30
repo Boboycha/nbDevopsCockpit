@@ -1,5 +1,6 @@
 package dclnbDevOpsCockpit;
 
+{$R *.res}
 {$IFDEF IMPLICITBUILDING This IFDEF should not be used by users}
 {$ALIGN 8}
 {$ASSERTIONS ON}
@@ -23,7 +24,6 @@ package dclnbDevOpsCockpit;
 {$MINENUMSIZE 1}
 {$IMAGEBASE $400000}
 {$DEFINE DEBUG}
-{$R *.res}
 {$ENDIF IMPLICITBUILDING}
 {$DESCRIPTION 'nb DevOps Cockpit - design-time registration'}
 {$DESIGNONLY}
