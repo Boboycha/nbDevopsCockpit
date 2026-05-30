@@ -1,6 +1,5 @@
 package nbFilePanePkg;
 
-{$R *.res}
 {$DESCRIPTION 'nb File Pane - runtime components'}
 {$RUNONLY}
 {$IMPLICITBUILD ON}

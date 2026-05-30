@@ -1,6 +1,5 @@
 package nbSSHPkg;
 
-{$R *.res}
 {$DESCRIPTION 'nb SSH - runtime support'}
 {$RUNONLY}
 {$IMPLICITBUILD ON}

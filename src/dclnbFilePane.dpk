@@ -1,6 +1,5 @@
 package dclnbFilePane;
 
-{$R *.res}
 {$DESCRIPTION 'nb File Pane - design-time registration'}
 {$DESIGNONLY}
 {$IMPLICITBUILD ON}
