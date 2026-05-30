@@ -35,4 +35,7 @@ requires
   DesignIDE,
   nbDevOpsCockpit;
 
+contains
+  Reg_nbDevOpsCockpit in 'Reg_nbDevOpsCockpit.pas';
+
 end.
