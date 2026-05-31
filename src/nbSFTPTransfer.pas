@@ -87,6 +87,7 @@ type
     procedure Start(ASource: TnbSFTPClient; const ARemoteSrc: string;
       ATarget: TnbSFTPClient; const ADstPath: string);
 
+  published
     property OnProgress: TnbTransferProgressEvent read FOnProgress write FOnProgress;
     property OnDone: TNotifyEvent read FOnDone write FOnDone;
     property OnError: TnbTransferErrorEvent read FOnError write FOnError;

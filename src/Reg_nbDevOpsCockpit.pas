@@ -20,7 +20,9 @@ uses
   ModernSSHClient,
   Terminal.Control,
   nbFilePane.Controls,
-  nbFilePane;
+  nbFilePane,
+  nbSFTPClient,
+  nbSFTPTransfer;
 
 const
   PaletteName = 'nb DevOps';
@@ -106,13 +108,17 @@ begin
     TnbSSHClient,
     TnbTerminalControl,
     TnbFilePane,
-    TnbToolButton
+    TnbToolButton,
+    TnbSFTPClient,
+    TnbSFTPTransfer
   ]);
 
   RegisterComponents(PaletteName, [
     TnbSSHClient,
     TnbTerminalControl,
-    TnbFilePane
+    TnbFilePane,
+    TnbSFTPClient,
+    TnbSFTPTransfer
   ]);
 
   RegisterSSHDesignTime;
