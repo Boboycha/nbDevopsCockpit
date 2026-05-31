@@ -52,6 +52,11 @@ type
     FListHost: TRectangle;
     FHeader: TLayout;
     FList: TListBox;
+    FBusyOverlay: TLayout;
+    FBusyShade: TRectangle;
+    FBusyIndicator: TAniIndicator;
+    FBusyLabel: TLabel;
+    FBusy: Boolean;
     FSelectedIndex: Integer;
     FSortColumn: Integer;
     FSortDescending: Boolean;
@@ -66,6 +71,7 @@ type
     FFolderCaption: string;
     FFileCaption: string;
     FParentFolderCaption: string;
+    FBusyText: string;
     FColBg, FColSurface, FColBorder, FColText, FColMuted,
       FColAccent: TAlphaColor;
     FOnTransfer: TNotifyEvent;
@@ -127,6 +133,8 @@ type
     procedure HandleTransfer(Sender: TObject);
     procedure HandlePathEditApplyStyle(Sender: TObject);
     procedure PaintPathEditChrome;
+    procedure SetBusy(AValue: Boolean);
+    procedure SetBusyText(const AValue: string);
     function ScopedStyle(const ABaseStyle: string): string;
     procedure SetStyleLookupPrefix(const AValue: string);
     procedure ApplyStyleLookups;
@@ -147,6 +155,7 @@ type
       AMuted: TAlphaColor = 0; AAccent: TAlphaColor = 0);
     procedure SetCaptions(const AName, ASize, AModified, AKind, AFolder,
       AFile, AParentFolder: string);
+    property BusyText: string read FBusyText write SetBusyText;
 
     (* Glyph кнопки передачи; пусто — кнопка скрыта. Клик → OnTransfer. *)
     procedure SetTransferButton(const AGlyph, AHint: string);
@@ -212,6 +221,7 @@ begin
   FFolderCaption := 'folder';
   FFileCaption := 'file';
   FParentFolderCaption := 'parent folder';
+  FBusyText := 'Loading...';
   CanFocus := True;
   TabStop := True;
   HitTest := True;
@@ -461,6 +471,49 @@ begin
   FList.OnViewportPositionChange := HandleListViewportChanged;
   FList.OnResize := HandleListResize;
 
+  FBusyOverlay := TLayout.Create(FListHost);
+  MarkInternalControl(FBusyOverlay);
+  FBusyOverlay.Parent := FListHost;
+  FBusyOverlay.Align := TAlignLayout.Contents;
+  FBusyOverlay.HitTest := True;
+  FBusyOverlay.Visible := False;
+  FBusyOverlay.Opacity := 0.94;
+
+  FBusyShade := TRectangle.Create(FBusyOverlay);
+  MarkInternalControl(FBusyShade);
+  FBusyShade.Parent := FBusyOverlay;
+  FBusyShade.Align := TAlignLayout.Contents;
+  FBusyShade.HitTest := True;
+  FBusyShade.Fill.Kind := TBrushKind.Solid;
+  FBusyShade.Fill.Color := FColBg;
+  FBusyShade.Stroke.Kind := TBrushKind.None;
+  FBusyShade.XRadius := 0;
+  FBusyShade.YRadius := 0;
+
+  FBusyIndicator := TAniIndicator.Create(FBusyOverlay);
+  MarkInternalControl(FBusyIndicator);
+  FBusyIndicator.Parent := FBusyOverlay;
+  FBusyIndicator.Align := TAlignLayout.Center;
+  FBusyIndicator.Width := 32;
+  FBusyIndicator.Height := 32;
+  FBusyIndicator.Enabled := False;
+
+  FBusyLabel := TLabel.Create(FBusyOverlay);
+  MarkInternalControl(FBusyLabel);
+  FBusyLabel.Parent := FBusyOverlay;
+  FBusyLabel.Align := TAlignLayout.Center;
+  FBusyLabel.Margins.Top := 56;
+  FBusyLabel.Width := 220;
+  FBusyLabel.Height := 24;
+  FBusyLabel.HitTest := False;
+  FBusyLabel.StyledSettings :=
+    FBusyLabel.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
+  FBusyLabel.TextSettings.Font.Size := 12;
+  FBusyLabel.TextSettings.FontColor := FColMuted;
+  FBusyLabel.TextSettings.HorzAlign := TTextAlign.Center;
+  FBusyLabel.TextSettings.VertAlign := TTextAlign.Center;
+  FBusyLabel.Text := FBusyText;
+
 end;
 
 procedure TnbFilePane.SetDropIndicatorVisible(AVisible: Boolean);
@@ -496,18 +549,23 @@ end;
 procedure TnbFilePane.Navigate(const APath: string);
 begin
   if FSource = nil then Exit;
+  SetBusy(True);
   FSource.ListDir(APath);
 end;
 
 procedure TnbFilePane.Refresh;
 begin
   if FSource <> nil then
+  begin
+    SetBusy(True);
     FSource.ListDir(FPath);
+  end;
 end;
 
 procedure TnbFilePane.HandleListing(Sender: TObject; const APath: string;
   const AEntries: TnbFileEntryArray);
 begin
+  SetBusy(False);
   FPath := APath;
   FPathEdit.Text := APath;
   FEntries := AEntries;
@@ -518,8 +576,33 @@ end;
 
 procedure TnbFilePane.HandleSourceError(Sender: TObject; const AMsg: string);
 begin
+  SetBusy(False);
   if Assigned(FOnError) then
     FOnError(Self, AMsg);
+end;
+
+procedure TnbFilePane.SetBusy(AValue: Boolean);
+begin
+  if FBusy = AValue then Exit;
+  FBusy := AValue;
+
+  if FBusyOverlay <> nil then
+  begin
+    FBusyOverlay.Visible := FBusy;
+    if FBusy then
+      FBusyOverlay.BringToFront;
+  end;
+  if FBusyIndicator <> nil then
+    FBusyIndicator.Enabled := FBusy;
+end;
+
+procedure TnbFilePane.SetBusyText(const AValue: string);
+begin
+  FBusyText := AValue;
+  if FBusyText = '' then
+    FBusyText := 'Loading...';
+  if FBusyLabel <> nil then
+    FBusyLabel.Text := FBusyText;
 end;
 
 procedure TnbFilePane.HandleChanged(Sender: TObject);
@@ -1336,6 +1419,10 @@ begin
     FListHost.Stroke.Color := ABorder;
     FListHost.Stroke.Thickness := 1;
   end;
+  if FBusyShade <> nil then
+    FBusyShade.Fill.Color := ABg;
+  if FBusyLabel <> nil then
+    FBusyLabel.TextSettings.FontColor := FColMuted;
   if FHeader <> nil then
     for I := 0 to FHeader.ChildrenCount - 1 do
     begin
