@@ -57,6 +57,13 @@ type
     FButtons: TList<TnbToolButton>;
     FTransferButton: TnbToolButton;
     FStyleLookupPrefix: string;
+    FColumnNameCaption: string;
+    FColumnSizeCaption: string;
+    FColumnModifiedCaption: string;
+    FColumnKindCaption: string;
+    FFolderCaption: string;
+    FFileCaption: string;
+    FParentFolderCaption: string;
     FColBg, FColSurface, FColBorder, FColText, FColMuted,
       FColAccent: TAlphaColor;
     FOnTransfer: TNotifyEvent;
@@ -83,6 +90,9 @@ type
     procedure FillList;
     procedure SortEntries;
     procedure UpdateHeaderCaptions;
+    function HeaderCaption(AColumn: Integer): string;
+    function EntryDetailCaption(const AEntry: TnbFileEntry;
+      ATag: Integer): string;
     procedure HandleHeaderClick(Sender: TObject);
     procedure HandleListViewportChanged(Sender: TObject;
       const OldViewportPosition, NewViewportPosition: TPointF;
@@ -132,6 +142,8 @@ type
     function  CurrentPath: string;
     procedure ApplyColors(ABg, ASurface, ABorder, AText: TAlphaColor;
       AMuted: TAlphaColor = 0; AAccent: TAlphaColor = 0);
+    procedure SetCaptions(const AName, ASize, AModified, AKind, AFolder,
+      AFile, AParentFolder: string);
 
     (* Glyph кнопки передачи; пусто — кнопка скрыта. Клик → OnTransfer. *)
     procedure SetTransferButton(const AGlyph, AHint: string);
@@ -188,6 +200,13 @@ begin
   FColMuted   := FILE_MUTED_TEXT;
   FColAccent  := FILE_ICON_BLUE;
   FSelectionColor := TAlphaColor($FF263246);
+  FColumnNameCaption := 'Name';
+  FColumnSizeCaption := 'Size';
+  FColumnModifiedCaption := 'Date Modified';
+  FColumnKindCaption := 'Kind';
+  FFolderCaption := 'folder';
+  FFileCaption := 'file';
+  FParentFolderCaption := 'parent folder';
   CanFocus := True;
   TabStop := True;
   HitTest := True;
@@ -414,9 +433,12 @@ begin
   HeaderLine.Fill.Color := TAlphaColor($30000000) or (FColBorder and $00FFFFFF);
   HeaderLine.Stroke.Kind := TBrushKind.None;
 
-  AddHeaderCell('Size', TAlignLayout.Right, FILE_COL_SIZE_WIDTH, FILE_SORT_SIZE);
-  AddHeaderCell('Date Modified', TAlignLayout.Right, FILE_COL_DATE_WIDTH, FILE_SORT_DATE);
-  AddHeaderCell('Name', TAlignLayout.Client, 0, FILE_SORT_NAME);
+  AddHeaderCell(HeaderCaption(FILE_SORT_SIZE), TAlignLayout.Right,
+    FILE_COL_SIZE_WIDTH, FILE_SORT_SIZE);
+  AddHeaderCell(HeaderCaption(FILE_SORT_DATE), TAlignLayout.Right,
+    FILE_COL_DATE_WIDTH, FILE_SORT_DATE);
+  AddHeaderCell(HeaderCaption(FILE_SORT_NAME), TAlignLayout.Client, 0,
+    FILE_SORT_NAME);
 
   FList := TListBox.Create(FListHost);
   MarkInternalControl(FList);
@@ -721,10 +743,7 @@ var
     DetailText.Parent := TextStack;
     DetailText.Align := TAlignLayout.Client;
     DetailText.HitTest := False;
-    if ATag = PARENT_ENTRY_TAG then
-      DetailText.Text := 'parent folder'
-    else
-      DetailText.Text := FormatFilePermissions(AEntry.Permissions, AEntry.IsDir);
+    DetailText.Text := EntryDetailCaption(AEntry, ATag);
     DetailText.StyledSettings := DetailText.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
     DetailText.TextSettings.FontColor := FColMuted;
     DetailText.TextSettings.Font.Size := 9;
@@ -806,10 +825,55 @@ begin
     begin
       Child := Cell.Children[J];
       if Child is TLabel then
-        TLabel(Child).Text := FileHeaderCaption(FileHeaderBaseCaption(Column),
+        TLabel(Child).Text := FileHeaderCaption(HeaderCaption(Column),
           Column, FSortColumn, FSortDescending);
     end;
   end;
+end;
+
+function TnbFilePane.HeaderCaption(AColumn: Integer): string;
+begin
+  case AColumn of
+    FILE_SORT_DATE:
+      Result := FColumnModifiedCaption;
+    FILE_SORT_SIZE:
+      Result := FColumnSizeCaption;
+    FILE_SORT_KIND:
+      Result := FColumnKindCaption;
+  else
+    Result := FColumnNameCaption;
+  end;
+end;
+
+function TnbFilePane.EntryDetailCaption(const AEntry: TnbFileEntry;
+  ATag: Integer): string;
+begin
+  if ATag = PARENT_ENTRY_TAG then
+    Exit(FParentFolderCaption);
+
+  if AEntry.Permissions <> 0 then
+    Exit(FormatFilePermissions(AEntry.Permissions, AEntry.IsDir));
+
+  if AEntry.IsDir then
+    Result := FFolderCaption
+  else
+    Result := FFileCaption;
+end;
+
+procedure TnbFilePane.SetCaptions(const AName, ASize, AModified, AKind,
+  AFolder, AFile, AParentFolder: string);
+begin
+  FColumnNameCaption := AName;
+  FColumnSizeCaption := ASize;
+  FColumnModifiedCaption := AModified;
+  FColumnKindCaption := AKind;
+  FFolderCaption := AFolder;
+  FFileCaption := AFile;
+  FParentFolderCaption := AParentFolder;
+
+  UpdateHeaderCaptions;
+  if FList <> nil then
+    FillList;
 end;
 
 procedure TnbFilePane.HandleHeaderClick(Sender: TObject);
