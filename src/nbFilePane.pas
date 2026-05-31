@@ -39,6 +39,8 @@ type
 
   TnbFilePaneDropEvent = procedure(Sender: TObject;
     ASourcePane: TnbFilePane) of object;
+  TnbFilePaneOpenFileEvent = procedure(Sender: TObject;
+    const AFullPath: string; const AEntry: TnbFileEntry) of object;
 
   TnbFilePane = class(TLayout)
   private
@@ -70,6 +72,7 @@ type
     FOnActivated: TNotifyEvent;
     FOnError: TnbFileErrorEvent;
     FOnFileDrop: TnbFilePaneDropEvent;
+    FOnOpenFile: TnbFilePaneOpenFileEvent;
     FDragArmed: Boolean;
     FDragging: Boolean;
     FDragStartScreen: TPointF;
@@ -160,6 +163,8 @@ type
     property OnError: TnbFileErrorEvent read FOnError write FOnError;
     property OnFileDrop: TnbFilePaneDropEvent
       read FOnFileDrop write FOnFileDrop;
+    property OnOpenFile: TnbFilePaneOpenFileEvent
+      read FOnOpenFile write FOnOpenFile;
   end;
 
 implementation
@@ -607,7 +612,10 @@ begin
         if (FSelectedIndex = PARENT_ENTRY_TAG) and (FSource <> nil) then
           Navigate(FSource.ParentDir(FPath))
         else if SelectedEntry(Entry) and Entry.IsDir and (FSource <> nil) then
-          Navigate(FSource.Combine(FPath, Entry.Name));
+          Navigate(FSource.Combine(FPath, Entry.Name))
+        else if SelectedEntry(Entry) and (not Entry.IsDir) and (FSource <> nil)
+          and Assigned(FOnOpenFile) then
+          FOnOpenFile(Self, FSource.Combine(FPath, Entry.Name), Entry);
         Key := 0;
       end;
     vkBack:
@@ -966,7 +974,9 @@ begin
   end;
   if not SelectedEntry(Entry) then Exit;
   if Entry.IsDir and (FSource <> nil) then
-    Navigate(FSource.Combine(FPath, Entry.Name));
+    Navigate(FSource.Combine(FPath, Entry.Name))
+  else if (not Entry.IsDir) and (FSource <> nil) and Assigned(FOnOpenFile) then
+    FOnOpenFile(Self, FSource.Combine(FPath, Entry.Name), Entry);
 end;
 
 procedure TnbFilePane.HandleRowMouseDown(Sender: TObject;
