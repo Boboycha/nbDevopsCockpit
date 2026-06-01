@@ -22,7 +22,7 @@ uses
   System.Generics.Collections, System.Generics.Defaults,
   FMX.Types, FMX.Controls, FMX.Graphics, FMX.Layouts, FMX.StdCtrls,
   FMX.Objects, FMX.Edit, FMX.ListBox,
-  nbFileSources, nbFilePane.Controls;
+  nbFileSources, nbFilePane.Controls, nbVectorIcons;
 
 type
   TnbFilePane = class;
@@ -393,7 +393,7 @@ begin
   FToolBar.Parent := Self;
   FToolBar.Align := TAlignLayout.Top;
   FToolBar.Height := 34;
-  FToolBar.Margins.Rect := RectF(8, 4, 8, 0);
+  FToolBar.Margins.Rect := RectF(0, 0, 0, 0);
 
   AddButton(#$2191, HandleUp,      'Вверх');
   AddButton('R',    HandleRefresh, 'Обновить');
@@ -716,7 +716,8 @@ var
   Entry: TnbFileEntry;
   RowBg, Line: TRectangle;
   Row, NameCell, TextStack: TLayout;
-  Icon, NameText, DetailText, DateText, SizeText: TLabel;
+  NameText, DetailText, DateText, SizeText: TLabel;
+  Icon: TnbVectorIcon;
 
   procedure AddRow(const AEntry: TnbFileEntry; ATag: Integer);
   begin
@@ -795,21 +796,17 @@ var
     NameCell.Align := TAlignLayout.Client;
     NameCell.HitTest := False;
 
-    Icon := TLabel.Create(NameCell);
+    Icon := TnbVectorIcon.Create(NameCell);
     Icon.Parent := NameCell;
     Icon.Align := TAlignLayout.Left;
-    Icon.Width := 32;
-    Icon.Margins.Rect := RectF(8, 0, 0, 0);
+    Icon.Width := 18;
+    Icon.Margins.Rect := RectF(8, 9, 6, 9);
     Icon.HitTest := False;
-    Icon.Text := FILE_ICON_FOLDER;
+    Icon.IconName := FILE_ICON_FOLDER;
     if not AEntry.IsDir then
-      Icon.Text := FILE_ICON_DOCUMENT;
-    Icon.StyledSettings := Icon.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Family, TStyledSetting.Size];
-    Icon.TextSettings.Font.Family := FILE_ICON_FONT;
-    Icon.TextSettings.Font.Size := 17;
-    Icon.TextSettings.FontColor := FColAccent;
-    Icon.TextSettings.VertAlign := TTextAlign.Center;
-    Icon.TextSettings.HorzAlign := TTextAlign.Center;
+      Icon.IconName := FILE_ICON_DOCUMENT;
+    Icon.IconColor := FColAccent;
+    Icon.StrokeWidth := 1.6;
 
     TextStack := TLayout.Create(NameCell);
     TextStack.Parent := NameCell;

@@ -80,7 +80,7 @@ Windows:
 Linux/macOS:
 
 - Use conditional compilation for platform units.
-- Do not assume MDL2 icon fonts exist.
+- Do not assume platform icon fonts exist.
 - Check shared library names and loader paths.
 
 ## Integration Checklist

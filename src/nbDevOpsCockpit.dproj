@@ -210,6 +210,7 @@
         <DCCReference Include="nbSSH.LibSSH2.pas"/>
         <DCCReference Include="nbSSH.KeyValidation.pas"/>
         <DCCReference Include="nbFileSources.pas"/>
+        <DCCReference Include="nbVectorIcons.pas"/>
         <DCCReference Include="nbFilePane.Controls.pas"/>
         <DCCReference Include="nbSFTPClient.pas"/>
         <DCCReference Include="nbSFTPTransfer.pas"/>

@@ -5,34 +5,19 @@ interface
 uses
   System.Classes, System.SysUtils, System.Types, System.UITypes,
   FMX.Controls, FMX.StdCtrls, FMX.Graphics, FMX.Objects,
-  nbFileSources;
+  nbFileSources, nbVectorIcons;
 
 const
-  {$IFDEF LINUX}
-  FILE_ICON_FONT       = '';
-  FILE_ICON_UP         = '^';
-  FILE_ICON_REFRESH    = 'R';
-  FILE_ICON_NEW_FOLDER = '+';
-  FILE_ICON_RENAME     = 'N';
-  FILE_ICON_DELETE     = 'X';
-  FILE_ICON_UPLOAD     = 'U';
-  FILE_ICON_DOWNLOAD   = 'D';
-  FILE_ICON_TRANSFER   = '>';
-  FILE_ICON_FOLDER     = 'd';
-  FILE_ICON_DOCUMENT   = 'f';
-  {$ELSE}
-  FILE_ICON_FONT       = 'Segoe MDL2 Assets';
-  FILE_ICON_UP         = #$E74A;
-  FILE_ICON_REFRESH    = #$E72C;
-  FILE_ICON_NEW_FOLDER = #$E8F4;
-  FILE_ICON_RENAME     = #$E8AC;
-  FILE_ICON_DELETE     = #$E74D;
-  FILE_ICON_UPLOAD     = #$E898;
-  FILE_ICON_DOWNLOAD   = #$E896;
-  FILE_ICON_TRANSFER   = #$E8AB;
-  FILE_ICON_FOLDER     = #$E8B7;
-  FILE_ICON_DOCUMENT   = #$E8A5;
-  {$ENDIF}
+  FILE_ICON_UP         = 'up';
+  FILE_ICON_REFRESH    = 'refresh';
+  FILE_ICON_NEW_FOLDER = 'plus';
+  FILE_ICON_RENAME     = 'edit';
+  FILE_ICON_DELETE     = 'delete';
+  FILE_ICON_UPLOAD     = 'upload';
+  FILE_ICON_DOWNLOAD   = 'download';
+  FILE_ICON_TRANSFER   = 'transfer';
+  FILE_ICON_FOLDER     = 'folder';
+  FILE_ICON_DOCUMENT   = 'file';
 
   FILE_ROW_HEIGHT      = 42;
   FILE_HEADER_HEIGHT   = 34;
@@ -51,6 +36,7 @@ const
 type
   TnbToolButton = class(TSpeedButton)
   private
+    FIcon: TnbVectorIcon;
     FLocalBg: TAlphaColor;
     FLocalBorder: TAlphaColor;
     FLocalText: TAlphaColor;
@@ -99,7 +85,7 @@ begin
   if (AGlyph = #$2192) or (AGlyph = #$2190) then
     Exit(FILE_ICON_TRANSFER);
 
-  Result := AGlyph;
+  Result := nbIconNameFor('', AGlyph, AHint);
 end;
 
 function FormatFileSize(ASize: Int64): string;
@@ -186,17 +172,17 @@ begin
   Align := TAlignLayout.Left;
   Width := 30;
   Margins.Rect := RectF(0, 3, 6, 3);
-  StyledSettings := StyledSettings - [TStyledSetting.Family,
-    TStyledSetting.Size, TStyledSetting.FontColor];
-  TextSettings.Font.Family := FILE_ICON_FONT;
-  TextSettings.Font.Size := 16;
-  TextSettings.FontColor := TAlphaColor($FFCCD4DE);
-  TextSettings.HorzAlign := TTextAlign.Center;
-  TextSettings.VertAlign := TTextAlign.Center;
-  TextSettings.Trimming := TTextTrimming.None;
+  Text := '';
+  StyledSettings := StyledSettings - [TStyledSetting.FontColor];
   FLocalBg := TAlphaColor($FF141820);
   FLocalBorder := TAlphaColor($FF344056);
   FLocalText := TAlphaColor($FFCCD4DE);
+  FIcon := TnbVectorIcon.Create(Self);
+  FIcon.Parent := Self;
+  FIcon.Align := TAlignLayout.Client;
+  FIcon.Margins.Rect := RectF(7, 7, 7, 7);
+  FIcon.IconColor := FLocalText;
+  FIcon.HitTest := False;
   OnApplyStyleLookup := HandleApplyStyleLookup;
   OnMouseEnter := HandleMouseEnter;
   OnMouseLeave := HandleMouseLeave;
@@ -239,7 +225,9 @@ var
 
 begin
   StyledSettings := StyledSettings - [TStyledSetting.FontColor];
-  TextSettings.FontColor := FLocalText;
+  Text := '';
+  if FIcon <> nil then
+    FIcon.IconColor := FLocalText;
   PaintShape('background');
   PaintShape('bg');
 end;
@@ -254,14 +242,18 @@ end;
 
 procedure TnbToolButton.SetGlyphText(const AValue: string);
 begin
-  Text := AValue;
+  Text := '';
+  if FIcon <> nil then
+    FIcon.IconName := nbIconNameFor('', AValue, Hint);
 end;
 
 procedure TnbToolButton.SetGlyphColor(AColor: TAlphaColor);
 begin
   FLocalText := AColor;
   StyledSettings := StyledSettings - [TStyledSetting.FontColor];
-  TextSettings.FontColor := AColor;
+  Text := '';
+  if FIcon <> nil then
+    FIcon.IconColor := AColor;
   PaintLocalChrome;
 end;
 
