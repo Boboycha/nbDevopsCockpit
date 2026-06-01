@@ -8,6 +8,19 @@ uses
   nbFileSources;
 
 const
+  {$IFDEF LINUX}
+  FILE_ICON_FONT       = '';
+  FILE_ICON_UP         = '^';
+  FILE_ICON_REFRESH    = 'R';
+  FILE_ICON_NEW_FOLDER = '+';
+  FILE_ICON_RENAME     = 'N';
+  FILE_ICON_DELETE     = 'X';
+  FILE_ICON_UPLOAD     = 'U';
+  FILE_ICON_DOWNLOAD   = 'D';
+  FILE_ICON_TRANSFER   = '>';
+  FILE_ICON_FOLDER     = 'd';
+  FILE_ICON_DOCUMENT   = 'f';
+  {$ELSE}
   FILE_ICON_FONT       = 'Segoe MDL2 Assets';
   FILE_ICON_UP         = #$E74A;
   FILE_ICON_REFRESH    = #$E72C;
@@ -19,6 +32,7 @@ const
   FILE_ICON_TRANSFER   = #$E8AB;
   FILE_ICON_FOLDER     = #$E8B7;
   FILE_ICON_DOCUMENT   = #$E8A5;
+  {$ENDIF}
 
   FILE_ROW_HEIGHT      = 42;
   FILE_HEADER_HEIGHT   = 34;

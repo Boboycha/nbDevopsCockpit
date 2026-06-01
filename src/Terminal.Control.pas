@@ -977,10 +977,7 @@ begin
   NewTheme := TTerminalTheme.Create;
   try
     if not TGoghThemeLoader.LoadIntoTheme(FileName, NewTheme, ErrorMsg) then
-    begin
-      NewTheme.Free;
       Exit;
-    end;
 
     (* Применяем тему - это сделает SetAllDirty внутри *)
     Self.Theme := NewTheme;
