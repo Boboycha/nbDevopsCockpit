@@ -104,3 +104,8 @@ The `libssh2` library is required:
 
 The project is under active development. Planned components: `TnbGitLabClient`,
 `TnbServerInventory`, `TnbSnippetRunner`, `TnbAuditLogger`.
+
+## Project Documentation
+
+- [Development Report](docs/DEVELOPMENT_REPORT.md)
+- [Developer Guide](docs/DEVELOPER_GUIDE.md)

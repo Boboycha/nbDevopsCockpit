@@ -97,3 +97,8 @@ end;
 
 Проект в активной разработке. Запланированы компоненты `TnbGitLabClient`,
 `TnbServerInventory`, `TnbSnippetRunner`, `TnbAuditLogger`.
+
+## Документация проекта
+
+- [Отчет о разработке](docs/DEVELOPMENT_REPORT.md)
+- [Руководство разработчика](docs/DEVELOPER_GUIDE.md)
