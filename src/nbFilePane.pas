@@ -407,7 +407,7 @@ begin
   FPathEdit.Align := TAlignLayout.Top;
   FPathEdit.Position.Y := 100;
   FPathEdit.Height := 30;
-  FPathEdit.Margins.Rect := RectF(8, 2, 8, 4);
+  FPathEdit.Margins.Rect := RectF(0, 0, 0, 0);
   FPathEdit.StyleLookup := ScopedStyle('editstyle');
   FPathEdit.ReadOnly := True;
   FPathEdit.TextSettings.HorzAlign := TTextAlign.Leading;
@@ -418,7 +418,7 @@ begin
   MarkInternalControl(FListHost);
   FListHost.Parent := Self;
   FListHost.Align := TAlignLayout.Client;
-  FListHost.Margins.Rect := RectF(8, 0, 8, 0);
+  FListHost.Margins.Rect := RectF(0, 0, 0, 0);
   FListHost.ClipChildren := True;
   FListHost.HitTest := True;
   FListHost.Fill.Kind := TBrushKind.Solid;
@@ -459,7 +459,7 @@ begin
   MarkInternalControl(FList);
   FList.Parent := FListHost;
   FList.Align := TAlignLayout.Client;
-  FList.Margins.Rect := RectF(1, 0, 1, 1);
+  FList.Margins.Rect := RectF(1, 1, 1, 1);
   FList.StyleLookup := ScopedStyle('listboxstyle');
   FList.ShowScrollBars := True;
   FList.ClipChildren := True;
