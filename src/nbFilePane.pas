@@ -806,7 +806,7 @@ var
     if not AEntry.IsDir then
       Icon.IconName := FILE_ICON_DOCUMENT;
     Icon.IconColor := FColAccent;
-    Icon.StrokeWidth := 1.6;
+    Icon.StrokeWidth := 1.4;
 
     TextStack := TLayout.Create(NameCell);
     TextStack.Parent := NameCell;

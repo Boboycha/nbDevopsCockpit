@@ -1,4 +1,4 @@
-unit nbVectorIcons;
+﻿unit nbVectorIcons;
 
 interface
 
@@ -114,59 +114,93 @@ begin
   AFill := False;
   N := CleanText(AName);
 
+  // Иконки в духе Lucide/Feather: сетка 24x24, скруглённые углы через кривые Безье
   if N = 'plus' then
     APath.Data := 'M 12 5 L 12 19 M 5 12 L 19 12'
   else if N = 'close' then
     APath.Data := 'M 6 6 L 18 18 M 18 6 L 6 18'
   else if N = 'save' then
-    APath.Data := 'M 5 4 L 17 4 L 19 6 L 19 20 L 5 20 Z M 8 4 L 8 10 L 16 10 L 16 4 M 8 16 L 16 16'
+    APath.Data := 'M 5 4 L 16 4 L 20 8 L 20 19 C 20 19.55 19.55 20 19 20 L 5 20 ' +
+      'C 4.45 20 4 19.55 4 19 L 4 5 C 4 4.45 4.45 4 5 4 Z ' +
+      'M 8 4 L 8 9.5 L 15 9.5 L 15 4 M 7 20 L 7 13.5 L 17 13.5 L 17 20'
   else if N = 'delete' then
-    APath.Data := 'M 7 8 L 17 8 M 10 8 L 10 20 M 14 8 L 14 20 M 8 8 L 9 21 L 15 21 L 16 8 M 10 5 L 14 5 L 15 8'
+    APath.Data := 'M 4 7 L 20 7 ' +
+      'M 9.5 7 L 9.5 5 C 9.5 4.45 9.95 4 10.5 4 L 13.5 4 C 14.05 4 14.5 4.45 14.5 5 L 14.5 7 ' +
+      'M 6 7 L 7 19.1 C 7.04 19.6 7.5 20 8 20 L 16 20 C 16.5 20 16.96 19.6 17 19.1 L 18 7 ' +
+      'M 10 10.5 L 10 16.5 M 14 10.5 L 14 16.5'
   else if N = 'edit' then
-    APath.Data := 'M 5 18 L 5 21 L 8 21 L 19 10 L 16 7 Z M 14 9 L 17 12'
+    APath.Data := 'M 20.3 7.7 L 8 20 L 4 21 L 5 17 L 17.3 4.7 ' +
+      'C 17.7 4.3 18.3 4.3 18.7 4.7 L 20.3 6.3 C 20.7 6.7 20.7 7.3 20.3 7.7 Z ' +
+      'M 15 7 L 18 10'
   else if N = 'copy' then
-    APath.Data := 'M 8 8 L 18 8 L 18 20 L 8 20 Z M 5 5 L 15 5 L 15 8'
+    APath.Data := 'M 10 9 L 19 9 C 19.55 9 20 9.45 20 10 L 20 19 C 20 19.55 19.55 20 19 20 L 10 20 ' +
+      'C 9.45 20 9 19.55 9 19 L 9 10 C 9 9.45 9.45 9 10 9 Z ' +
+      'M 5.5 15 L 5 15 C 4.45 15 4 14.55 4 14 L 4 5 C 4 4.45 4.45 4 5 4 L 14 4 C 14.55 4 15 4.45 15 5 L 15 5.5'
   else if N = 'paste' then
-    APath.Data := 'M 8 6 L 16 6 L 16 9 L 8 9 Z M 6 8 L 18 8 L 18 21 L 6 21 Z'
+    APath.Data := 'M 9.5 3.5 L 14.5 3.5 C 15.05 3.5 15.5 3.95 15.5 4.5 L 15.5 5.5 ' +
+      'C 15.5 6.05 15.05 6.5 14.5 6.5 L 9.5 6.5 C 8.95 6.5 8.5 6.05 8.5 5.5 L 8.5 4.5 C 8.5 3.95 8.95 3.5 9.5 3.5 Z ' +
+      'M 15.5 5 L 17 5 C 17.55 5 18 5.45 18 6 L 18 19.5 C 18 20.05 17.55 20.5 17 20.5 L 7 20.5 ' +
+      'C 6.45 20.5 6 20.05 6 19.5 L 6 6 C 6 5.45 6.45 5 7 5 L 8.5 5'
   else if N = 'play' then
   begin
     AFill := True;
-    APath.Data := 'M 8 5 L 19 12 L 8 19 Z';
+    APath.Data := 'M 8.5 5.5 L 19 12 L 8.5 18.5 Z';
   end
   else if N = 'back' then
-    APath.Data := 'M 18 6 L 10 12 L 18 18 M 10 12 L 22 12'
+    APath.Data := 'M 20 12 L 4 12 M 10 6 L 4 12 L 10 18'
   else if N = 'refresh' then
-    APath.Data := 'M 18 8 A 7 7 0 1 0 19 15 M 18 8 L 18 4 L 22 4'
+    APath.Data := 'M 21 12 A 9 9 0 1 1 12 3 C 14.5 3 16.9 4 18.7 5.7 L 21 8 ' +
+      'M 21 3 L 21 8 L 16 8'
   else if N = 'upload' then
-    APath.Data := 'M 12 19 L 12 6 M 6 12 L 12 6 L 18 12 M 5 20 L 19 20'
+    APath.Data := 'M 12 16 L 12 4.5 M 7 9.5 L 12 4.5 L 17 9.5 ' +
+      'M 4 17 L 4 19 C 4 19.55 4.45 20 5 20 L 19 20 C 19.55 20 20 19.55 20 19 L 20 17'
   else if N = 'download' then
-    APath.Data := 'M 12 5 L 12 18 M 6 12 L 12 18 L 18 12 M 5 20 L 19 20'
+    APath.Data := 'M 12 4 L 12 15.5 M 7 10.5 L 12 15.5 L 17 10.5 ' +
+      'M 4 17 L 4 19 C 4 19.55 4.45 20 5 20 L 19 20 C 19.55 20 20 19.55 20 19 L 20 17'
   else if N = 'transfer' then
-    APath.Data := 'M 5 8 L 18 8 M 14 4 L 18 8 L 14 12 M 19 16 L 6 16 M 10 12 L 6 16 L 10 20'
+    APath.Data := 'M 4 8 L 17 8 M 13.5 4.5 L 17 8 L 13.5 11.5 ' +
+      'M 20 16 L 7 16 M 10.5 12.5 L 7 16 L 10.5 19.5'
   else if N = 'key' then
-    APath.Data := 'M 8 8 C 6 8 5 9 5 11 C 5 13 6 14 8 14 C 10 14 11 13 11 11 C 11 9 10 8 8 8 Z M 11 11 L 20 11 M 17 11 L 17 14 M 20 11 L 20 13'
+    APath.Data := 'M 4 11.5 A 3.25 3.25 0 1 0 10.5 11.5 A 3.25 3.25 0 1 0 4 11.5 ' +
+      'M 10.5 11.5 L 20 11.5 M 16.5 11.5 L 16.5 15 M 20 11.5 L 20 14.5'
   else if N = 'server' then
-    APath.Data := 'M 6 4 L 18 4 L 18 14 L 6 14 Z M 9 18 L 15 18 M 12 14 L 12 18'
+    APath.Data := 'M 4 5 C 4 4.45 4.45 4 5 4 L 19 4 C 19.55 4 20 4.45 20 5 ' +
+      'L 20 14 C 20 14.55 19.55 15 19 15 L 5 15 C 4.45 15 4 14.55 4 14 Z ' +
+      'M 9 19 L 15 19 M 12 15 L 12 19'
   else if N = 'folder' then
-    APath.Data := 'M 4 7 L 10 7 L 12 9 L 20 9 L 20 19 L 4 19 Z'
+    APath.Data := 'M 4 6 C 4 5.45 4.45 5 5 5 L 9.6 5 L 11.6 7 L 19 7 C 19.55 7 20 7.45 20 8 ' +
+      'L 20 18 C 20 18.55 19.55 19 19 19 L 5 19 C 4.45 19 4 18.55 4 18 Z'
   else if N = 'file' then
-    APath.Data := 'M 7 3 L 15 3 L 19 7 L 19 21 L 7 21 Z M 15 3 L 15 8 L 20 8'
+    APath.Data := 'M 14.5 3 L 7 3 C 6.45 3 6 3.45 6 4 L 6 20 C 6 20.55 6.45 21 7 21 L 17 21 ' +
+      'C 17.55 21 18 20.55 18 20 L 18 6.5 Z M 14.5 3 L 14.5 6.5 L 18 6.5'
   else if N = 'theme' then
-    APath.Data := 'M 12 4 A 8 8 0 1 0 12 20 A 3 3 0 0 1 12 14 L 14 14 A 2 2 0 0 0 14 10 L 12 10 Z'
+    // Палитра художника: контур с выемкой под большой палец + 4 лунки краски
+    APath.Data := 'M 12 21.5 A 9.5 9.5 0 1 1 21.5 12 C 21.5 13.65 20.15 15 18.5 15 ' +
+      'L 16.5 15 C 15.4 15 14.5 15.9 14.5 17 C 14.5 17.5 14.7 17.95 15 18.35 ' +
+      'C 15.3 18.75 15.5 19.2 15.5 19.7 C 15.5 20.7 14.7 21.5 13.7 21.5 Z ' +
+      'M 12.5 6.5 A 1 1 0 1 0 14.5 6.5 A 1 1 0 1 0 12.5 6.5 ' +
+      'M 16.5 10.5 A 1 1 0 1 0 18.5 10.5 A 1 1 0 1 0 16.5 10.5 ' +
+      'M 7.5 7.5 A 1 1 0 1 0 9.5 7.5 A 1 1 0 1 0 7.5 7.5 ' +
+      'M 5.5 12.5 A 1 1 0 1 0 7.5 12.5 A 1 1 0 1 0 5.5 12.5'
   else if N = 'broadcast' then
-    APath.Data := 'M 5 12 A 7 7 0 0 1 19 12 M 8 12 A 4 4 0 0 1 16 12 M 12 12 L 12 18'
+    // Fan-out "один-ко-многим": узел-источник слева, три ветки к узлам справа
+    APath.Data := 'M 3 12 A 2 2 0 1 0 7 12 A 2 2 0 1 0 3 12 ' +
+      'M 17 5 A 2 2 0 1 0 21 5 A 2 2 0 1 0 17 5 ' +
+      'M 17 12 A 2 2 0 1 0 21 12 A 2 2 0 1 0 17 12 ' +
+      'M 17 19 A 2 2 0 1 0 21 19 A 2 2 0 1 0 17 19 ' +
+      'M 7 12 L 17 12 M 6.8 11.1 L 17.2 5.9 M 6.8 12.9 L 17.2 18.1'
   else if N = 'focus' then
     APath.Data := 'M 5 10 L 5 5 L 10 5 M 14 5 L 19 5 L 19 10 M 19 14 L 19 19 L 14 19 M 10 19 L 5 19 L 5 14'
   else if N = 'scripts' then
-    APath.Data := 'M 8 7 L 4 12 L 8 17 M 16 7 L 20 12 L 16 17 M 13 6 L 11 18'
+    APath.Data := 'M 8 7 L 3.5 12 L 8 17 M 16 7 L 20.5 12 L 16 17 M 13.5 5.5 L 10.5 18.5'
   else if N = 'select' then
-    APath.Data := 'M 5 13 L 10 18 L 20 7'
+    APath.Data := 'M 4.5 12.5 L 9.5 17.5 L 19.5 6.5'
   else if N = 'up' then
-    APath.Data := 'M 12 5 L 12 20 M 6 11 L 12 5 L 18 11'
+    APath.Data := 'M 12 19 L 12 5 M 6 11 L 12 5 L 18 11'
   else
   begin
     AFill := True;
-    APath.Data := 'M 12 10 A 2 2 0 1 0 12 14 A 2 2 0 1 0 12 10';
+    APath.Data := 'M 12 9.5 A 2.5 2.5 0 1 0 12 14.5 A 2.5 2.5 0 1 0 12 9.5';
   end;
 end;
 
@@ -176,7 +210,7 @@ constructor TnbVectorIcon.Create(AOwner: TComponent);
 begin
   inherited;
   FIconColor := TAlphaColors.White;
-  FStrokeWidth := 1.6;
+  FStrokeWidth := 1.4;
   FIconName := 'dot';
   HitTest := False;
 end;
@@ -200,6 +234,9 @@ begin
     Canvas.Stroke.Kind := TBrushKind.Solid;
     Canvas.Stroke.Color := FIconColor;
     Canvas.Stroke.Thickness := FStrokeWidth;
+    // Скруглённые концы и стыки — иначе тонкие штрихи выглядят "рублеными"
+    Canvas.Stroke.Cap := TStrokeCap.Round;
+    Canvas.Stroke.Join := TStrokeJoin.Round;
     Canvas.Fill.Kind := TBrushKind.Solid;
     Canvas.Fill.Color := FIconColor;
     if FillIcon then
