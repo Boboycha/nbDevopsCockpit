@@ -112,6 +112,10 @@ protected
     procedure WriteText(const Text: string);
     procedure Clear;
 
+    (* Внешняя подача клавиши в терминал. Нужна, когда форма перехватывает
+       клавишу (например Tab — FMX уводит его на навигацию по фокусу). *)
+    procedure InjectKey(Key: Word; KeyChar: WideChar; Shift: TShiftState);
+
     procedure AddSyntaxRule(const Keyword: string; const AnsiColor: string; IgnoreCase: Boolean = True);
     procedure ClearSyntaxRules;
 
@@ -627,6 +631,13 @@ begin
     KeyChar := #0;
     FNeedRedraw := True;
   end;
+end;
+
+procedure TnbTerminalControl.InjectKey(Key: Word; KeyChar: WideChar;
+  Shift: TShiftState);
+begin
+  // Переиспользуем штатную обработку ввода (перевод клавиши и отправку в SSH).
+  KeyDown(Key, KeyChar, Shift);
 end;
 
 procedure TnbTerminalControl.SendMouseReport(AButton, ACol, ARow: Integer;
