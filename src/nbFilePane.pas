@@ -48,7 +48,9 @@ type
     FPath: string;
     FEntries: TnbFileEntryArray;
     FToolBar: TLayout;
-    FPathEdit: TEdit;
+    FBreadcrumbBg: TRectangle;
+    FBreadcrumbBar: TFlowLayout;
+    FBreadcrumbPaths: TArray<string>;
     FListHost: TRectangle;
     FHeader: TLayout;
     FList: TListBox;
@@ -131,8 +133,10 @@ type
     procedure HandleRename(Sender: TObject);
     procedure HandleDelete(Sender: TObject);
     procedure HandleTransfer(Sender: TObject);
-    procedure HandlePathEditApplyStyle(Sender: TObject);
-    procedure PaintPathEditChrome;
+    procedure RebuildBreadcrumbs(const APath: string);
+    procedure HandleBreadcrumbClick(Sender: TObject);
+    class procedure SplitPathSegments(const APath: string;
+      out ALabels, AFullPaths: TArray<string>); static;
     procedure SetBusy(AValue: Boolean);
     procedure SetBusyText(const AValue: string);
     function ScopedStyle(const ABaseStyle: string): string;
@@ -401,18 +405,28 @@ begin
   AddButton('N',    HandleRename,  'Переименовать');
   AddButton('X',    HandleDelete,  'Удалить');
 
-  FPathEdit := TEdit.Create(Self);
-  MarkInternalControl(FPathEdit);
-  FPathEdit.Parent := Self;
-  FPathEdit.Align := TAlignLayout.Top;
-  FPathEdit.Position.Y := 100;
-  FPathEdit.Height := 30;
-  FPathEdit.Margins.Rect := RectF(0, 0, 0, 0);
-  FPathEdit.StyleLookup := ScopedStyle('editstyle');
-  FPathEdit.ReadOnly := True;
-  FPathEdit.TextSettings.HorzAlign := TTextAlign.Leading;
-  FPathEdit.TextSettings.VertAlign := TTextAlign.Center;
-  FPathEdit.OnApplyStyleLookup := HandlePathEditApplyStyle;
+  FBreadcrumbBg := TRectangle.Create(Self);
+  MarkInternalControl(FBreadcrumbBg);
+  FBreadcrumbBg.Parent := Self;
+  FBreadcrumbBg.Align := TAlignLayout.Top;
+  FBreadcrumbBg.Height := 30;
+  FBreadcrumbBg.Margins.Rect := RectF(0, 0, 0, 0);
+  FBreadcrumbBg.Fill.Kind := TBrushKind.Solid;
+  FBreadcrumbBg.Fill.Color := FColBg;
+  FBreadcrumbBg.Stroke.Kind := TBrushKind.Solid;
+  FBreadcrumbBg.Stroke.Color := FColBorder;
+  FBreadcrumbBg.Stroke.Thickness := 1;
+  FBreadcrumbBg.XRadius := 0;
+  FBreadcrumbBg.YRadius := 0;
+  FBreadcrumbBg.ClipChildren := True;
+  FBreadcrumbBg.HitTest := True;
+
+  FBreadcrumbBar := TFlowLayout.Create(FBreadcrumbBg);
+  MarkInternalControl(FBreadcrumbBar);
+  FBreadcrumbBar.Parent := FBreadcrumbBg;
+  FBreadcrumbBar.Align := TAlignLayout.Client;
+  FBreadcrumbBar.Margins.Rect := RectF(8, 0, 8, 0);
+  FBreadcrumbBar.HitTest := True;
 
   FListHost := TRectangle.Create(Self);
   MarkInternalControl(FListHost);
@@ -567,7 +581,7 @@ procedure TnbFilePane.HandleListing(Sender: TObject; const APath: string;
 begin
   SetBusy(False);
   FPath := APath;
-  FPathEdit.Text := APath;
+  RebuildBreadcrumbs(APath);
   FEntries := AEntries;
   FSelectedIndex := -1;
   SortEntries;
@@ -1322,8 +1336,6 @@ var
 begin
   for I := 0 to FButtons.Count - 1 do
     FButtons[I].StyleLookup := ScopedStyle('speedbuttonstyle');
-  if FPathEdit <> nil then
-    FPathEdit.StyleLookup := ScopedStyle('editstyle');
   if FList <> nil then
     FList.StyleLookup := ScopedStyle('listboxstyle');
   FillList;
@@ -1342,38 +1354,140 @@ begin
   Result := AddButton(AGlyph, AOnClick, AHint);
 end;
 
-procedure TnbFilePane.HandlePathEditApplyStyle(Sender: TObject);
-begin
-  PaintPathEditChrome;
-end;
-
-procedure TnbFilePane.PaintPathEditChrome;
+class procedure TnbFilePane.SplitPathSegments(const APath: string;
+  out ALabels, AFullPaths: TArray<string>);
 var
-  Obj: TFmxObject;
-  Shape: TShape;
+  Parts: TArray<string>;
+  I: Integer;
+  Sep: Char;
+  Accumulated: string;
+  IsUnix: Boolean;
+begin
+  ALabels := [];
+  AFullPaths := [];
+  if APath = '' then Exit;
 
-  procedure PaintShape(const AName: string; AFill: TAlphaColor);
+  IsUnix := APath.StartsWith('/');
+  if IsUnix then
+    Sep := '/'
+  else
+    Sep := '\';
+
+  Parts := APath.Split([Sep], TStringSplitOptions.ExcludeEmpty);
+
+  if IsUnix then
   begin
-    Obj := FPathEdit.FindStyleResource(AName);
-    if Obj is TShape then
+    SetLength(ALabels, Length(Parts) + 1);
+    SetLength(AFullPaths, Length(Parts) + 1);
+    ALabels[0] := '/';
+    AFullPaths[0] := '/';
+    Accumulated := '';
+    for I := 0 to High(Parts) do
     begin
-      Shape := TShape(Obj);
-      Shape.Fill.Kind := TBrushKind.Solid;
-      Shape.Fill.Color := AFill;
-      Shape.Stroke.Kind := TBrushKind.Solid;
-      Shape.Stroke.Color := FColBorder;
+      Accumulated := Accumulated + '/' + Parts[I];
+      ALabels[I + 1] := Parts[I];
+      AFullPaths[I + 1] := Accumulated;
+    end;
+  end
+  else
+  begin
+    SetLength(ALabels, Length(Parts));
+    SetLength(AFullPaths, Length(Parts));
+    if Length(Parts) = 0 then Exit;
+    ALabels[0] := Parts[0] + '\';
+    AFullPaths[0] := Parts[0] + '\';
+    Accumulated := Parts[0] + '\';
+    for I := 1 to High(Parts) do
+    begin
+      Accumulated := Accumulated + Parts[I] + '\';
+      ALabels[I] := Parts[I];
+      AFullPaths[I] := Accumulated;
     end;
   end;
+end;
 
+procedure TnbFilePane.RebuildBreadcrumbs(const APath: string);
+const
+  BAR_H   = 30;
+  SEP_W   = 16;
+  FONT_SZ = 12;
+var
+  Labels, Paths: TArray<string>;
+  I: Integer;
+  Lbl: TLabel;
+  Sep: TLabel;
+  IsLast: Boolean;
+  Obj: TFmxObject;
+  TxtW: Integer;
 begin
-  if FPathEdit = nil then Exit;
+  if FBreadcrumbBar = nil then Exit;
 
-  FPathEdit.StyledSettings := FPathEdit.StyledSettings -
-    [TStyledSetting.FontColor];
-  FPathEdit.TextSettings.FontColor := FColText;
-  PaintShape('background', FColBg);
-  PaintShape('bg_rest', FColBg);
-  PaintShape('bg_focused', FColSurface);
+  while FBreadcrumbBar.ChildrenCount > 0 do
+  begin
+    Obj := FBreadcrumbBar.Children[0];
+    Obj.Parent := nil;
+    Obj.Free;
+  end;
+
+  SplitPathSegments(APath, Labels, Paths);
+  FBreadcrumbPaths := Paths;
+
+  for I := 0 to High(Labels) do
+  begin
+    IsLast := (I = High(Labels));
+
+    if I > 0 then
+    begin
+      Sep := TLabel.Create(FBreadcrumbBar);
+      Sep.Parent := FBreadcrumbBar;
+      Sep.Width := SEP_W;
+      Sep.Height := BAR_H;
+      Sep.Text := '›';
+      Sep.StyledSettings := [];
+      Sep.TextSettings.FontColor := FColMuted;
+      Sep.TextSettings.Font.Size := FONT_SZ;
+      Sep.TextSettings.HorzAlign := TTextAlign.Center;
+      Sep.TextSettings.VertAlign := TTextAlign.Center;
+      Sep.HitTest := False;
+    end;
+
+    TxtW := Length(Labels[I]) * 7 + 10;
+    if TxtW < 16 then TxtW := 16;
+
+    Lbl := TLabel.Create(FBreadcrumbBar);
+    Lbl.Parent := FBreadcrumbBar;
+    Lbl.Width := TxtW;
+    Lbl.Height := BAR_H;
+    Lbl.Text := Labels[I];
+    Lbl.StyledSettings := [];
+    Lbl.TextSettings.Font.Size := FONT_SZ;
+    Lbl.TextSettings.HorzAlign := TTextAlign.Leading;
+    Lbl.TextSettings.VertAlign := TTextAlign.Center;
+    if IsLast then
+    begin
+      Lbl.TextSettings.FontColor := FColText;
+      Lbl.TextSettings.Font.Style := [TFontStyle.fsBold];
+      Lbl.HitTest := False;
+    end
+    else
+    begin
+      Lbl.TextSettings.FontColor := FColMuted;
+      Lbl.Tag := I;
+      Lbl.HitTest := True;
+      Lbl.Cursor := crHandPoint;
+      Lbl.OnClick := HandleBreadcrumbClick;
+    end;
+  end;
+end;
+
+procedure TnbFilePane.HandleBreadcrumbClick(Sender: TObject);
+var
+  Idx: Integer;
+begin
+  if not (Sender is TLabel) then Exit;
+  Idx := TLabel(Sender).Tag;
+  if (Idx >= 0) and (Idx < Length(FBreadcrumbPaths)) then
+    Navigate(FBreadcrumbPaths[Idx]);
 end;
 
 procedure TnbFilePane.ApplyColors(ABg, ASurface, ABorder, AText,
@@ -1403,10 +1517,11 @@ begin
     or (Round((ASurface and $FF) * 0.82 + (FColAccent and $FF) * 0.18) and $FF);
   for I := 0 to FButtons.Count - 1 do
     FButtons[I].ApplyLocalChrome(ABg, ABorder, AText);
-  if FPathEdit <> nil then
+  if FBreadcrumbBg <> nil then
   begin
-    FPathEdit.ApplyStyleLookup;
-    PaintPathEditChrome;
+    FBreadcrumbBg.Fill.Color := ABg;
+    FBreadcrumbBg.Stroke.Color := ABorder;
+    RebuildBreadcrumbs(FPath);
   end;
   if FListHost <> nil then
   begin
