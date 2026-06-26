@@ -1,11 +1,15 @@
 ﻿unit nbSFTPTransfer;
 
 (*
-  TnbSFTPTransfer streams one remote SFTP file to another SFTP target.
+  TnbSFTPTransfer streams files between SFTP endpoints or between SFTP and the
+  local filesystem. SFTP has no server-to-server copy primitive, so bytes pass
+  through this process. The worker reads chunks from the source and writes them
+  to the target using a pipelined reader thread + buffer queue.
 
-  SFTP has no server-to-server copy primitive, so bytes still pass through this
-  process. The file is no longer buffered as a full local temp file: the worker
-  reads chunks from source and writes them to target.
+  Supported transfer modes:
+    SFTP → SFTP   via Start()
+    SFTP → local  via StartDownload()
+    local → SFTP  via StartUpload()
 *)
 
 interface
@@ -31,6 +35,8 @@ type
     TargetInfo: TnbSFTPConnectionInfo;
     SourcePath: string;
     TargetPath: string;
+    SourceIsLocal: Boolean;
+    TargetIsLocal: Boolean;
   end;
 
   TnbSFTPTransferWorker = class(TThread)
@@ -40,6 +46,8 @@ type
     FTargetInfo: TnbSFTPConnectionInfo;
     FSourcePath: string;
     FTargetPath: string;
+    FSourceIsLocal: Boolean;
+    FTargetIsLocal: Boolean;
     FError: string;
     FStage: TnbTransferPhase;
     FDone: Int64;
@@ -54,7 +62,8 @@ type
   public
     constructor Create(AOwner: TnbSFTPTransfer;
       const ASourceInfo, ATargetInfo: TnbSFTPConnectionInfo;
-      const ASourcePath, ATargetPath: string);
+      const ASourcePath, ATargetPath: string;
+      ASourceIsLocal: Boolean = False; ATargetIsLocal: Boolean = False);
 
     property Error: string read FError;
   end;
@@ -82,10 +91,12 @@ type
     procedure Cancel;
     procedure ClearQueue;
 
-    (* Р—Р°РїСѓСЃС‚РёС‚СЊ РїРµСЂРµРґР°С‡Сѓ ARemoteSrc (РЅР° СЃРµСЂРІРµСЂРµ ASource) РІ ADstPath
-       (РЅР° СЃРµСЂРІРµСЂРµ ATarget). РћР±Р° РїСѓС‚Рё вЂ” Р°Р±СЃРѕР»СЋС‚РЅС‹Рµ РїСѓС‚Рё РЅР° СЃРµСЂРІРµСЂР°С…. *)
     procedure Start(ASource: TnbSFTPClient; const ARemoteSrc: string;
       ATarget: TnbSFTPClient; const ADstPath: string);
+    procedure StartDownload(ASource: TnbSFTPClient;
+      const ARemotePath, ALocalPath: string);
+    procedure StartUpload(const ALocalPath: string;
+      ATarget: TnbSFTPClient; const ARemotePath: string);
 
   published
     property OnProgress: TnbTransferProgressEvent read FOnProgress write FOnProgress;
@@ -96,6 +107,7 @@ type
 implementation
 
 uses
+  System.StrUtils,
   blcksock, nbSSH.LibSSH2;
 
 const
@@ -469,7 +481,8 @@ end;
 
 constructor TnbSFTPTransferWorker.Create(AOwner: TnbSFTPTransfer;
   const ASourceInfo, ATargetInfo: TnbSFTPConnectionInfo;
-  const ASourcePath, ATargetPath: string);
+  const ASourcePath, ATargetPath: string;
+  ASourceIsLocal: Boolean = False; ATargetIsLocal: Boolean = False);
 begin
   inherited Create(True);
   FreeOnTerminate := False;
@@ -478,7 +491,14 @@ begin
   FTargetInfo := ATargetInfo;
   FSourcePath := ASourcePath;
   FTargetPath := ATargetPath;
-  FStage := tpStream;
+  FSourceIsLocal := ASourceIsLocal;
+  FTargetIsLocal := ATargetIsLocal;
+  if ASourceIsLocal then
+    FStage := tpUpload
+  else if ATargetIsLocal then
+    FStage := tpDownload
+  else
+    FStage := tpStream;
 end;
 
 procedure TnbSFTPTransferWorker.Summary(const AMsg: string);
@@ -548,6 +568,7 @@ procedure TnbSFTPTransferWorker.Execute;
 var
   SourceSession, TargetSession: TnbSFTPRawSession;
   TargetExec: TnbSSHExecWriteSession;
+  LocalSourceStream, LocalTargetStream: TFileStream;
   SourceHandle, TargetHandle: PLIBSSH2_SFTP_HANDLE;
   PipelineQueue: TnbSFTPBufferQueue;
   ReaderThread: TThread;
@@ -570,6 +591,16 @@ var
   var
     CleanupSession: TnbSFTPRawSession;
   begin
+    if FTargetIsLocal then
+    begin
+      try
+        if TFile.Exists(FTargetPath) then
+          TFile.Delete(FTargetPath);
+        Trace('partial local target deleted');
+      except
+      end;
+      Exit;
+    end;
     CleanupSession := nil;
     try
       CleanupSession := TnbSFTPRawSession.Create(FTargetInfo,
@@ -592,6 +623,8 @@ begin
   SourceSession := nil;
   TargetSession := nil;
   TargetExec := nil;
+  LocalSourceStream := nil;
+  LocalTargetStream := nil;
   SourceHandle := nil;
   TargetHandle := nil;
   PipelineQueue := nil;
@@ -608,76 +641,107 @@ begin
   SshMaxEagainStreak := 0;
   try
     if TRANSFER_TRACE_ENABLED then
-      Trace(Format('start source=%s:%s %s %s target=%s:%s %s %s',
-        [FSourceInfo.Host, FSourceInfo.Port, FSourceInfo.User, FSourcePath,
-         FTargetInfo.Host, FTargetInfo.Port, FTargetInfo.User, FTargetPath]));
+    begin
+      if FSourceIsLocal then
+        Trace(Format('start source=local %s target=%s:%s %s',
+          [FSourcePath, FTargetInfo.Host, FTargetInfo.Port, FTargetPath]))
+      else if FTargetIsLocal then
+        Trace(Format('start source=%s:%s %s target=local %s',
+          [FSourceInfo.Host, FSourceInfo.Port, FSourcePath, FTargetPath]))
+      else
+        Trace(Format('start source=%s:%s %s target=%s:%s %s',
+          [FSourceInfo.Host, FSourceInfo.Port, FSourcePath,
+           FTargetInfo.Host, FTargetInfo.Port, FTargetPath]));
+    end;
 
-    SourceSession := TnbSFTPRawSession.Create(FSourceInfo,
-      function: Boolean
+    // --- Source setup ---
+    if FSourceIsLocal then
+    begin
+      LocalSourceStream := TFileStream.Create(FSourcePath,
+        fmOpenRead or fmShareDenyWrite);
+      FTotal := LocalSourceStream.Size;
+    end
+    else
+    begin
+      SourceSession := TnbSFTPRawSession.Create(FSourceInfo,
+        function: Boolean
+        begin
+          Result := Terminated;
+        end, True);
+      if TRANSFER_TRACE_ENABLED then
       begin
-        Result := Terminated;
-      end, True);
-    if not TARGET_WRITE_MODE_SSH_EXEC then
-      TargetSession := TnbSFTPRawSession.Create(FTargetInfo,
-        function: Boolean
-        begin
-          Result := Terminated;
-        end, True)
+        Trace('connect source begin');
+        OpStarted := TraceTick;
+      end;
+      SourceSession.Connect;
+      if TRANSFER_TRACE_ENABLED then
+        Trace(Format('connect source end elapsed=%dms', [TraceTick - OpStarted]));
+      if TRANSFER_TRACE_ENABLED then
+      begin
+        Trace('stat source begin');
+        OpStarted := TraceTick;
+      end;
+      FTotal := SourceSession.StatSize(FSourcePath);
+      if TRANSFER_TRACE_ENABLED then
+        Trace(Format('stat source end size=%d elapsed=%dms',
+          [FTotal, TraceTick - OpStarted]));
+    end;
+
+    // --- Target setup ---
+    if FTargetIsLocal then
+    begin
+      LocalTargetStream := TFileStream.Create(FTargetPath, fmCreate);
+    end
     else
-      TargetExec := TnbSSHExecWriteSession.Create(FTargetInfo,
-        function: Boolean
-        begin
-          Result := Terminated;
-        end);
-    if TRANSFER_TRACE_ENABLED then
     begin
-      Trace('connect source begin');
-      OpStarted := TraceTick;
+      if TARGET_WRITE_MODE_SSH_EXEC then
+        TargetExec := TnbSSHExecWriteSession.Create(FTargetInfo,
+          function: Boolean
+          begin
+            Result := Terminated;
+          end)
+      else
+        TargetSession := TnbSFTPRawSession.Create(FTargetInfo,
+          function: Boolean
+          begin
+            Result := Terminated;
+          end, True);
+      if TRANSFER_TRACE_ENABLED then
+      begin
+        Trace('connect target begin');
+        OpStarted := TraceTick;
+      end;
+      if TARGET_WRITE_MODE_SSH_EXEC then
+        TargetExec.StartWriteCommand(FTargetPath)
+      else
+        TargetSession.Connect;
+      if TRANSFER_TRACE_ENABLED then
+        Trace(Format('connect target end elapsed=%dms', [TraceTick - OpStarted]));
     end;
-    SourceSession.Connect;
-    if TRANSFER_TRACE_ENABLED then
-      Trace(Format('connect source end elapsed=%dms', [TraceTick - OpStarted]));
 
-    if TRANSFER_TRACE_ENABLED then
+    // --- Open SFTP handles ---
+    if not FSourceIsLocal then
     begin
-      Trace('stat source begin');
-      OpStarted := TraceTick;
+      if TRANSFER_TRACE_ENABLED then
+      begin
+        Trace('open source begin');
+        OpStarted := TraceTick;
+      end;
+      SourceHandle := SourceSession.OpenRead(FSourcePath);
+      if TRANSFER_TRACE_ENABLED then
+        Trace(Format('open source end elapsed=%dms', [TraceTick - OpStarted]));
     end;
-    FTotal := SourceSession.StatSize(FSourcePath);
-    if TRANSFER_TRACE_ENABLED then
-      Trace(Format('stat source end size=%d elapsed=%dms',
-        [FTotal, TraceTick - OpStarted]));
-
-    if TRANSFER_TRACE_ENABLED then
+    if (TargetSession <> nil) then
     begin
-      Trace('connect target begin');
-      OpStarted := TraceTick;
-    end;
-    if TARGET_WRITE_MODE_SSH_EXEC then
-      TargetExec.StartWriteCommand(FTargetPath)
-    else
-      TargetSession.Connect;
-    if TRANSFER_TRACE_ENABLED then
-      Trace(Format('connect target end elapsed=%dms', [TraceTick - OpStarted]));
-
-    if TRANSFER_TRACE_ENABLED then
-    begin
-      Trace('open source begin');
-      OpStarted := TraceTick;
-    end;
-    SourceHandle := SourceSession.OpenRead(FSourcePath);
-    if TRANSFER_TRACE_ENABLED then
-      Trace(Format('open source end elapsed=%dms', [TraceTick - OpStarted]));
-
-    if TRANSFER_TRACE_ENABLED then
-    begin
-      Trace('open target begin');
-      OpStarted := TraceTick;
-    end;
-    if not TARGET_WRITE_MODE_SSH_EXEC then
+      if TRANSFER_TRACE_ENABLED then
+      begin
+        Trace('open target begin');
+        OpStarted := TraceTick;
+      end;
       TargetHandle := TargetSession.OpenWrite(FTargetPath);
-    if TRANSFER_TRACE_ENABLED then
-      Trace(Format('open target end elapsed=%dms', [TraceTick - OpStarted]));
+      if TRANSFER_TRACE_ENABLED then
+        Trace(Format('open target end elapsed=%dms', [TraceTick - OpStarted]));
+    end;
 
     SetLength(Buffer, STREAM_BUFFER_SIZE);
     FDone := 0;
@@ -694,14 +758,13 @@ begin
           SetLength(ReadBuffer, STREAM_BUFFER_SIZE);
           while not Terminated do
           begin
-            if TRANSFER_TRACE_ENABLED then
-              Trace(Format('read begin request=%d', [Length(ReadBuffer)]));
             ReadStarted := TraceTick;
-            LocalReadLen := SourceSession.Read(SourceHandle, ReadBuffer[0],
-              Length(ReadBuffer));
+            if FSourceIsLocal then
+              LocalReadLen := LocalSourceStream.Read(ReadBuffer[0], Length(ReadBuffer))
+            else
+              LocalReadLen := SourceSession.Read(SourceHandle, ReadBuffer[0],
+                Length(ReadBuffer));
             Inc(ReadMs, TraceTick - ReadStarted);
-            if TRANSFER_TRACE_ENABLED then
-              Trace(Format('read end result=%d', [LocalReadLen]));
             if LocalReadLen = 0 then Break;
             Inc(ReadChunks);
 
@@ -752,7 +815,9 @@ begin
           OpStarted := TraceTick;
         end;
         WriteStarted := TraceTick;
-        if TARGET_WRITE_MODE_SSH_EXEC then
+        if FTargetIsLocal then
+          WriteLen := LocalTargetStream.Write(Buffer[Offset], ReadLen - Offset)
+        else if TARGET_WRITE_MODE_SSH_EXEC then
           WriteLen := TargetExec.Write(Buffer[Offset], ReadLen - Offset)
         else
           WriteLen := TargetSession.Write(TargetHandle, Buffer[Offset],
@@ -766,7 +831,12 @@ begin
         Inc(Offset, WriteLen);
         Inc(FDone, WriteLen);
         Inc(WriteCalls);
-        FStage := tpStream;
+        if FSourceIsLocal then
+          FStage := tpUpload
+        else if FTargetIsLocal then
+          FStage := tpDownload
+        else
+          FStage := tpStream;
         QueueProgress;
         if (FTotal > 0) and (FDone >= FTotal) then Break;
       end;
@@ -806,41 +876,56 @@ begin
   end;
   FreeAndNil(PipelineQueue);
 
-  if TargetSession <> nil then
+  // --- Close target ---
+  if FTargetIsLocal then
+    FreeAndNil(LocalTargetStream)
+  else
   begin
-    FStage := tpClosingTarget;
-    QueueProgress(True);
-    Trace('close target begin');
-    OpStarted := TraceTick;
-    TargetSession.CloseFile(TargetHandle);
-    Trace(Format('close target end elapsed=%dms', [TraceTick - OpStarted]));
-  end;
-  if TargetExec <> nil then
-  begin
-    FStage := tpClosingTarget;
-    QueueProgress(True);
-    Trace('finish ssh target begin');
-    OpStarted := TraceTick;
-    if FError = '' then
+    if TargetSession <> nil then
     begin
-      try
-        TargetExec.Finish;
-      except
-        on E: Exception do
-          FError := E.Message;
-      end;
+      FStage := tpClosingTarget;
+      QueueProgress(True);
+      Trace('close target begin');
+      OpStarted := TraceTick;
+      TargetSession.CloseFile(TargetHandle);
+      Trace(Format('close target end elapsed=%dms', [TraceTick - OpStarted]));
     end;
-    Trace(Format('finish ssh target end elapsed=%dms', [TraceTick - OpStarted]));
+    if TargetExec <> nil then
+    begin
+      FStage := tpClosingTarget;
+      QueueProgress(True);
+      Trace('finish ssh target begin');
+      OpStarted := TraceTick;
+      if FError = '' then
+      begin
+        try
+          TargetExec.Finish;
+        except
+          on E: Exception do
+            FError := E.Message;
+        end;
+      end;
+      Trace(Format('finish ssh target end elapsed=%dms', [TraceTick - OpStarted]));
+    end;
   end;
-  if SourceSession <> nil then
+
+  // --- Close source ---
+  if not FSourceIsLocal then
   begin
-    FStage := tpClosingSource;
-    QueueProgress(True);
-    Trace('close source begin');
-    OpStarted := TraceTick;
-    SourceSession.CloseFile(SourceHandle);
-    Trace(Format('close source end elapsed=%dms', [TraceTick - OpStarted]));
-  end;
+    if SourceSession <> nil then
+    begin
+      FStage := tpClosingSource;
+      QueueProgress(True);
+      Trace('close source begin');
+      OpStarted := TraceTick;
+      SourceSession.CloseFile(SourceHandle);
+      Trace(Format('close source end elapsed=%dms', [TraceTick - OpStarted]));
+    end;
+  end
+  else
+    FreeAndNil(LocalSourceStream);
+
+  // --- Disconnect sessions ---
   FStage := tpClosingSession;
   QueueProgress(True);
   Trace('abort sessions begin');
@@ -865,16 +950,17 @@ begin
   Trace('abort sessions end');
 
   WasCancelled := Terminated;
-  if WasCancelled then
+  if WasCancelled or (FError <> '') then
   begin
     try
       DeletePartialTarget;
     except
       on E: Exception do
-        FError := 'Transfer cancelled, but partial target file was not deleted: ' +
-          E.Message;
+        if WasCancelled then
+          FError := 'Transfer cancelled, but partial target file was not deleted: ' +
+            E.Message;
     end;
-    if FError = '' then
+    if WasCancelled and (FError = '') then
       FError := 'Transfer cancelled';
   end;
 
@@ -882,7 +968,11 @@ begin
     StatusText := 'ok'
   else
     StatusText := 'error: ' + FError;
-  if TARGET_WRITE_MODE_SSH_EXEC then
+  if FTargetIsLocal then
+    ModeText := 'download'
+  else if FSourceIsLocal then
+    ModeText := 'upload'
+  else if TARGET_WRITE_MODE_SSH_EXEC then
     ModeText := 'ssh-exec'
   else
     ModeText := 'sftp';
@@ -894,7 +984,9 @@ begin
      TraceTick - TransferStarted, ReadMs, WriteMs, PopWaitMs, PushWaitMs,
      ReadChunks, WriteCalls, SshEagainCount, SshEagainWaitMs,
      SshMaxEagainStreak, STREAM_BUFFER_SIZE, PIPELINE_QUEUE_LIMIT,
-     ModeText, FSourceInfo.Host, FTargetInfo.Host]));
+     ModeText,
+     IfThen(FSourceIsLocal, 'local', FSourceInfo.Host),
+     IfThen(FTargetIsLocal, 'local', FTargetInfo.Host)]));
 
   Owner := FOwner;
   ErrorText := FError;
@@ -986,10 +1078,51 @@ end;
 
 procedure TnbSFTPTransfer.StartJob(const AJob: TnbSFTPTransferJob);
 begin
-  FPhase := tpStream;
+  if AJob.SourceIsLocal then
+    FPhase := tpUpload
+  else if AJob.TargetIsLocal then
+    FPhase := tpDownload
+  else
+    FPhase := tpStream;
   FWorker := TnbSFTPTransferWorker.Create(Self, AJob.SourceInfo, AJob.TargetInfo,
-    AJob.SourcePath, AJob.TargetPath);
+    AJob.SourcePath, AJob.TargetPath, AJob.SourceIsLocal, AJob.TargetIsLocal);
   FWorker.Start;
+end;
+
+procedure TnbSFTPTransfer.StartDownload(ASource: TnbSFTPClient;
+  const ARemotePath, ALocalPath: string);
+var
+  Job: TnbSFTPTransferJob;
+begin
+  if ASource = nil then Exit;
+  FillChar(Job, SizeOf(Job), 0);
+  ASource.ExportConnectionInfo(Job.SourceInfo);
+  Job.SourcePath := ARemotePath;
+  Job.TargetPath := ALocalPath;
+  Job.SourceIsLocal := False;
+  Job.TargetIsLocal := True;
+  if Busy then
+    FQueue.Enqueue(Job)
+  else
+    StartJob(Job);
+end;
+
+procedure TnbSFTPTransfer.StartUpload(const ALocalPath: string;
+  ATarget: TnbSFTPClient; const ARemotePath: string);
+var
+  Job: TnbSFTPTransferJob;
+begin
+  if ATarget = nil then Exit;
+  FillChar(Job, SizeOf(Job), 0);
+  Job.SourcePath := ALocalPath;
+  ATarget.ExportConnectionInfo(Job.TargetInfo);
+  Job.TargetPath := ARemotePath;
+  Job.SourceIsLocal := True;
+  Job.TargetIsLocal := False;
+  if Busy then
+    FQueue.Enqueue(Job)
+  else
+    StartJob(Job);
 end;
 
 procedure TnbSFTPTransfer.StartNextQueuedJob;
