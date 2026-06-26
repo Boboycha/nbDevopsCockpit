@@ -1377,7 +1377,12 @@ procedure TnbSFTPClient.QueueCommand(AKind: TSFTPCommandKind; const APath1,
 var
   Cmd: TSFTPCommand;
 begin
-  if FWorker = nil then Exit;
+  if FWorker = nil then
+  begin
+    if Assigned(FOnError) then
+      FOnError(Self, 'Нет подключения');
+    Exit;
+  end;
   Cmd.Kind := AKind;
   Cmd.Path1 := APath1;
   Cmd.Path2 := APath2;
