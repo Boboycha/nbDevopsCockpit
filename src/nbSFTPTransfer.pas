@@ -324,7 +324,13 @@ begin
     FMaxEagainStreak := FCurrentEagainStreak;
 
   Started := TraceTick;
-  Sleep(0);
+  // Wait for socket readiness so the OS can deliver window updates from server.
+  // Sleep(0) caused libssh2 to not flush its send buffer properly on high-EAGAIN
+  // uploads (3M+ EAGAIN events), leading to data truncation on the server side.
+  if FSocket <> nil then
+    FSocket.CanRead(50)
+  else
+    Sleep(1);
   Inc(FEagainWaitMs, TraceTick - Started);
 end;
 
@@ -979,14 +985,15 @@ begin
   Summary(Format('transfer summary status=%s bytes=%d/%d elapsed=%dms ' +
     'read=%dms write=%dms pop_wait=%dms push_wait=%dms ' +
     'read_chunks=%d write_calls=%d ssh_eagain=%d ssh_eagain_wait=%dms ' +
-    'ssh_eagain_max_streak=%d buffer=%d queue_limit=%d mode=%s source=%s target=%s',
+    'ssh_eagain_max_streak=%d buffer=%d queue_limit=%d mode=%s ' +
+    'source=%s target=%s',
     [StatusText, FDone, FTotal,
      TraceTick - TransferStarted, ReadMs, WriteMs, PopWaitMs, PushWaitMs,
      ReadChunks, WriteCalls, SshEagainCount, SshEagainWaitMs,
      SshMaxEagainStreak, STREAM_BUFFER_SIZE, PIPELINE_QUEUE_LIMIT,
      ModeText,
-     IfThen(FSourceIsLocal, 'local', FSourceInfo.Host),
-     IfThen(FTargetIsLocal, 'local', FTargetInfo.Host)]));
+     IfThen(FSourceIsLocal, 'local', FSourceInfo.Host) + ':' + FSourcePath,
+     IfThen(FTargetIsLocal, 'local', FTargetInfo.Host) + ':' + FTargetPath]));
 
   Owner := FOwner;
   ErrorText := FError;
