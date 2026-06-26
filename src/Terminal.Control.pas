@@ -584,6 +584,10 @@ begin
   begin
     if Assigned(FOnData) then
     begin
+      // Нормализуем окончания строк: Enter в терминале = #13 (CR).
+      // CRLF и LF → CR, иначе \r\n отправляет два события и дают пустые строки.
+      Text := Text.Replace(#13#10, #13);
+      Text := Text.Replace(#10, #13);
       if FBuffer.BracketedPaste then
         Text := TTerminalClipboard.WrapBracketedPaste(Text);
       FOnData(Text);
