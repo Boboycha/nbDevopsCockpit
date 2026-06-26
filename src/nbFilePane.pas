@@ -152,6 +152,7 @@ type
     procedure SetSource(const ASource: InbFileSource);
     procedure Navigate(const APath: string);
     procedure Refresh;
+    procedure ClearBusy;
     function  SelectedEntry(out AEntry: TnbFileEntry): Boolean;
     function  EntryExists(const AName: string; out AIsDir: Boolean): Boolean;
     function  CurrentPath: string;
@@ -593,6 +594,11 @@ begin
   SetBusy(False);
   if Assigned(FOnError) then
     FOnError(Self, AMsg);
+end;
+
+procedure TnbFilePane.ClearBusy;
+begin
+  SetBusy(False);
 end;
 
 procedure TnbFilePane.SetBusy(AValue: Boolean);
