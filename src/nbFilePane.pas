@@ -41,6 +41,8 @@ type
     ASourcePane: TnbFilePane) of object;
   TnbFilePaneOpenFileEvent = procedure(Sender: TObject;
     const AFullPath: string; const AEntry: TnbFileEntry) of object;
+  TnbFilePanePromptEvent = reference to function(const ATitle,
+    ALabel: string; var AValue: string): Boolean;
 
   TnbFilePane = class(TLayout)
   private
@@ -84,6 +86,7 @@ type
     FOnFileDrop: TnbFilePaneDropEvent;
     FOnOpenFile: TnbFilePaneOpenFileEvent;
     FOnConfirmDelete: TFunc<string, Boolean>;
+    FOnPrompt: TnbFilePanePromptEvent;
     FBtnMkdir:  TnbToolButton;
     FBtnRename: TnbToolButton;
     FBtnDelete: TnbToolButton;
@@ -202,12 +205,13 @@ type
       read FOnOpenFile write FOnOpenFile;
     property OnConfirmDelete: TFunc<string, Boolean>
       read FOnConfirmDelete write FOnConfirmDelete;
+    property OnPrompt: TnbFilePanePromptEvent read FOnPrompt write FOnPrompt;
   end;
 
 implementation
 
 uses
-  System.Math, FMX.Dialogs, FMX.Forms;
+  System.Math, FMX.Forms;
 
 const
   PARENT_ENTRY_TAG = -1;
@@ -1418,7 +1422,8 @@ begin
   if FSource = nil then Exit;
   SetLength(Values, 1);
   Values[0] := '';
-  if InputQuery(FLangNewFolderTitle, [FLangNewFolderLabel], Values)
+  if Assigned(FOnPrompt) and
+    FOnPrompt(FLangNewFolderTitle, FLangNewFolderLabel, Values[0])
     and (Trim(Values[0]) <> '') then
     FSource.MakeDir(FSource.Combine(FPath, Trim(Values[0])));
 end;
@@ -1431,7 +1436,8 @@ begin
   if (FSource = nil) or (not SelectedEntry(Entry)) then Exit;
   SetLength(Values, 1);
   Values[0] := Entry.Name;
-  if InputQuery(FLangRenameTitle, [FLangRenameLabel], Values)
+  if Assigned(FOnPrompt) and
+    FOnPrompt(FLangRenameTitle, FLangRenameLabel, Values[0])
     and (Trim(Values[0]) <> '') and (Trim(Values[0]) <> Entry.Name) then
     FSource.Rename(FSource.Combine(FPath, Entry.Name),
                    FSource.Combine(FPath, Trim(Values[0])));
@@ -1454,8 +1460,7 @@ begin
   if Assigned(FOnConfirmDelete) then
     Confirmed := FOnConfirmDelete(Msg)
   else
-    Confirmed := MessageDlg(Msg, TMsgDlgType.mtConfirmation,
-      [TMsgDlgBtn.mbYes, TMsgDlgBtn.mbNo], 0) = mrYes;
+    Confirmed := False;
   if Confirmed then
     for Entry in Entries do
       FSource.Delete(FSource.Combine(FPath, Entry.Name), Entry.IsDir);
