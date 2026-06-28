@@ -30,7 +30,7 @@ type
   TnbSFTPClient = class;
 
   TSFTPCommandKind = (sckListDir, sckDownload, sckUpload, sckDelete, sckRemoveDir,
-    sckMakeDir, sckRename);
+    sckMakeDir, sckRename, sckDeleteDirRecursive);
 
   TSFTPCommand = record
     Kind: TSFTPCommandKind;
@@ -83,6 +83,8 @@ type
     function Write(AHandle: PLIBSSH2_SFTP_HANDLE; const ABuffer;
       ACount: NativeUInt): NativeInt;
     procedure DeleteFile(const ARemotePath: string);
+    function ListDir(const APath: string): TSFTPEntryArray;
+    procedure MakeDir(const APath: string);
 
     property LastError: string read FLastError;
   end;
@@ -123,6 +125,7 @@ type
     procedure CmdRemoveDir(const ARemotePath: string);
     procedure CmdMakeDir(const ARemotePath: string);
     procedure CmdRename(const AOldPath, ANewPath: string);
+    procedure CmdDeleteDirRecursive(const ARemotePath: string);
   protected
     procedure Execute; override;
   public
@@ -165,6 +168,7 @@ type
     procedure Upload(const ALocalPath, ARemotePath: string);
     procedure Delete(const ARemotePath: string);
     procedure RemoveDir(const ARemotePath: string);
+    procedure DeleteDir(const ARemotePath: string);
     procedure MakeDir(const ARemotePath: string);
     procedure Rename(const AOldPath, ANewPath: string);
 
@@ -214,7 +218,8 @@ const
   LIBSSH2_SFTP_ATTR_SIZE = $00000001;
   LIBSSH2_SFTP_ATTR_PERMISSIONS = $00000004;
   LIBSSH2_SFTP_ATTR_ACMODTIME = $00000008;
-  LIBSSH2_FX_EOF = 1;
+  LIBSSH2_FX_EOF                = 1;
+  LIBSSH2_FX_FILE_ALREADY_EXISTS = 11;
   RAW_STREAM_OPERATION_TIMEOUT_MS = 30000;
   S_IFMT = $F000;
   S_IFDIR = $4000;
@@ -407,8 +412,15 @@ begin
 end;
 
 function ToUtf8Ansi(const S: string): AnsiString;
+var
+  U: UTF8String;
 begin
-  Result := AnsiString(UTF8String(S));
+  // Конвертируем Unicode → UTF-8, затем копируем сырые байты без повторной
+  // перекодировки через system codepage (иначе Кириллица портится на 1251/1252).
+  U := UTF8String(S);
+  SetLength(Result, Length(U));
+  if Length(U) > 0 then
+    Move(PAnsiChar(U)^, PAnsiChar(Result)^, Length(U));
 end;
 
 function RemoteJoin(const ADir, AName: string): string;
@@ -809,6 +821,76 @@ begin
     raise Exception.Create('Delete remote file failed: ' + GetSFTPError);
 end;
 
+function TnbSFTPRawSession.ListDir(const APath: string): TSFTPEntryArray;
+var
+  PathA, NameA: AnsiString;
+  Handle: PLIBSSH2_SFTP_HANDLE;
+  Buf, LongBuf: TBytes;
+  Attrs: TLIBSSH2_SFTP_ATTRIBUTES;
+  ReadLen: Integer;
+  Entry: TSFTPEntry;
+begin
+  Result := nil;
+  PathA := ToUtf8Ansi(APath);
+  Handle := PLIBSSH2_SFTP_HANDLE(WaitPointer(
+    function: Pointer
+    begin
+      Result := ssh2_sftp_open_ex(FSFTP, PAnsiChar(PathA), Length(PathA),
+        0, 0, LIBSSH2_SFTP_OPENDIR);
+    end));
+  if Handle = nil then
+    raise Exception.Create('ListDir failed: ' + GetSFTPError);
+  SetLength(Buf, 1024);
+  SetLength(LongBuf, 2048);
+  try
+    while not IsCancelled do
+    begin
+      FillChar(Attrs, SizeOf(Attrs), 0);
+      ReadLen := WaitResult(
+        function: Integer
+        begin
+          Result := ssh2_sftp_readdir_ex(Handle, PAnsiChar(@Buf[0]), Length(Buf),
+            PAnsiChar(@LongBuf[0]), Length(LongBuf), @Attrs);
+        end);
+      if ReadLen = 0 then Break;
+      if ReadLen < 0 then
+      begin
+        if (ReadLen = LIBSSH2_ERROR_SFTP_PROTOCOL) and Assigned(ssh2_sftp_last_error)
+          and (ssh2_sftp_last_error(FSFTP) = LIBSSH2_FX_EOF) then
+          Break;
+        raise Exception.Create('ListDir read failed: ' + GetSFTPError);
+      end;
+      SetString(NameA, PAnsiChar(@Buf[0]), ReadLen);
+      if (NameA = '.') or (NameA = '..') then Continue;
+      Entry := Default(TSFTPEntry);
+      Entry.Name  := TEncoding.UTF8.GetString(Buf, 0, ReadLen);
+      Entry.Size  := Attrs.filesize;
+      Entry.IsDir := (Attrs.permissions and S_IFMT) = S_IFDIR;
+      Result := Result + [Entry];
+    end;
+  finally
+    ssh2_sftp_close_handle(Handle);
+  end;
+end;
+
+procedure TnbSFTPRawSession.MakeDir(const APath: string);
+var
+  PathA: AnsiString;
+  R: Integer;
+begin
+  PathA := ToUtf8Ansi(APath);
+  R := WaitResult(
+    function: Integer
+    begin
+      Result := ssh2_sftp_mkdir_ex(FSFTP, PAnsiChar(PathA), Length(PathA), $1ED);
+    end);
+  if R = 0 then Exit;
+  if (R = LIBSSH2_ERROR_SFTP_PROTOCOL) and Assigned(ssh2_sftp_last_error)
+    and (ssh2_sftp_last_error(FSFTP) = LIBSSH2_FX_FILE_ALREADY_EXISTS) then
+    Exit;
+  raise Exception.Create('MakeDir failed: ' + GetSFTPError);
+end;
+
 { TSFTPWorkerThread }
 
 constructor TSFTPWorkerThread.Create(AOwner: TnbSFTPClient);
@@ -1080,6 +1162,7 @@ begin
     sckRemoveDir: CmdRemoveDir(ACmd.Path1);
     sckMakeDir: CmdMakeDir(ACmd.Path1);
     sckRename: CmdRename(ACmd.Path1, ACmd.Path2);
+    sckDeleteDirRecursive: CmdDeleteDirRecursive(ACmd.Path1);
   end;
 end;
 
@@ -1128,7 +1211,7 @@ begin
       SetString(NameA, PAnsiChar(@Buf[0]), ReadLen);
       if (NameA = '.') or (NameA = '..') then Continue;
       Entry := Default(TSFTPEntry);
-      Entry.Name := string(UTF8String(NameA));
+      Entry.Name := TEncoding.UTF8.GetString(Buf, 0, ReadLen);
       Entry.Size := Attrs.filesize;
       Entry.Permissions := Attrs.permissions;
       Entry.IsDir := (Attrs.permissions and S_IFMT) = S_IFDIR;
@@ -1287,6 +1370,78 @@ begin
   Synchronize(DoOpDone);
 end;
 
+procedure TSFTPWorkerThread.CmdDeleteDirRecursive(const ARemotePath: string);
+
+  procedure DeleteRec(const APath: string);
+  var
+    PathA, NameA: AnsiString;
+    Handle: PLIBSSH2_SFTP_HANDLE;
+    Buf, LongBuf: TBytes;
+    Attrs: TLIBSSH2_SFTP_ATTRIBUTES;
+    ReadLen: Integer;
+    EntryPath: string;
+  begin
+    PathA := ToUtf8Ansi(APath);
+    Handle := PLIBSSH2_SFTP_HANDLE(WaitPointer(
+      function: Pointer
+      begin
+        Result := ssh2_sftp_open_ex(FSFTP, PAnsiChar(PathA), Length(PathA),
+          0, 0, LIBSSH2_SFTP_OPENDIR);
+      end));
+    if Handle = nil then
+      raise Exception.CreateFmt('DeleteDir: не удалось открыть "%s": %s',
+        [APath, GetSFTPError]);
+    SetLength(Buf, 1024);
+    SetLength(LongBuf, 2048);
+    try
+      while not Terminated do
+      begin
+        FillChar(Attrs, SizeOf(Attrs), 0);
+        ReadLen := WaitResult(
+          function: Integer
+          begin
+            Result := ssh2_sftp_readdir_ex(Handle,
+              PAnsiChar(@Buf[0]), Length(Buf),
+              PAnsiChar(@LongBuf[0]), Length(LongBuf), @Attrs);
+          end);
+        if ReadLen = 0 then Break;
+        if ReadLen < 0 then
+        begin
+          if (ReadLen = LIBSSH2_ERROR_SFTP_PROTOCOL)
+            and Assigned(ssh2_sftp_last_error)
+            and (ssh2_sftp_last_error(FSFTP) = LIBSSH2_FX_EOF) then
+            Break;
+          raise Exception.Create('DeleteDir: ошибка чтения папки: ' + GetSFTPError);
+        end;
+        SetString(NameA, PAnsiChar(@Buf[0]), ReadLen);
+        if (NameA = '.') or (NameA = '..') then Continue;
+        EntryPath := APath.TrimRight(['/']) + '/' + TEncoding.UTF8.GetString(Buf, 0, ReadLen);
+        if (Attrs.permissions and S_IFMT) = S_IFDIR then
+          DeleteRec(EntryPath)
+        else
+        begin
+          var FileA := ToUtf8Ansi(EntryPath);
+          WaitResult(function: Integer
+          begin
+            Result := ssh2_sftp_unlink_ex(FSFTP, PAnsiChar(FileA), Length(FileA));
+          end);
+        end;
+      end;
+    finally
+      ssh2_sftp_close_handle(Handle);
+    end;
+    // удаляем теперь пустую папку
+    WaitResult(function: Integer
+    begin
+      Result := ssh2_sftp_rmdir_ex(FSFTP, PAnsiChar(PathA), Length(PathA));
+    end);
+  end;
+
+begin
+  DeleteRec(ARemotePath);
+  Synchronize(DoOpDone);
+end;
+
 procedure TSFTPWorkerThread.CmdMakeDir(const ARemotePath: string);
 var
   PathA: AnsiString;
@@ -1412,6 +1567,11 @@ end;
 procedure TnbSFTPClient.RemoveDir(const ARemotePath: string);
 begin
   QueueCommand(sckRemoveDir, ARemotePath);
+end;
+
+procedure TnbSFTPClient.DeleteDir(const ARemotePath: string);
+begin
+  QueueCommand(sckDeleteDirRecursive, ARemotePath);
 end;
 
 procedure TnbSFTPClient.MakeDir(const ARemotePath: string);

@@ -115,13 +115,10 @@
         <GenPackage>true</GenPackage>
         <SanitizedProjectName>nbDevOpsCockpit</SanitizedProjectName>
         <DCC_Description>nb DevOps Cockpit - components for DevOps tooling (SSH, GitLab, etc.)</DCC_Description>
-        <RuntimeOnlyPackage>false</RuntimeOnlyPackage>
         <DesignOnlyPackage>true</DesignOnlyPackage>
         <VerInfo_Locale>1049</VerInfo_Locale>
         <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductName=;ProductVersion=1.0.0.0;Comments=;CFBundleName=</VerInfo_Keys>
         <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;REST.Authenticator.OAuth.WebForm;Winapi;$(DCC_Namespace)</DCC_Namespace>
-        <DCC_DcpOutput>..\bin\dpk\$(Platform)\$(Config)</DCC_DcpOutput>
-        <DCC_BplOutput>..\bin\$(Platform)\$(Config)</DCC_BplOutput>
         <DCC_DcuOutput>..\dcu\$(Platform)\$(Config)</DCC_DcuOutput>
         <DCC_UnitSearchPath>..\bin\$(Platform)\$(Config);Z:\VCL\synapse;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
     </PropertyGroup>
@@ -247,10 +244,7 @@
                 <Source>
                     <Source Name="MainSource">nbDevOpsCockpit.dpk</Source>
                 </Source>
-                <Excluded_Packages>
-                    <Excluded_Packages Name="$(BDSBIN)\dcloffice2k290.bpl">Microsoft Office 2000 Sample Automation Server Wrapper Components</Excluded_Packages>
-                    <Excluded_Packages Name="$(BDSBIN)\dclofficexp290.bpl">Microsoft Office XP Sample Automation Server Wrapper Components</Excluded_Packages>
-                </Excluded_Packages>
+                <Excluded_Packages/>
             </Delphi.Personality>
             <Platforms>
                 <Platform value="Android">False</Platform>

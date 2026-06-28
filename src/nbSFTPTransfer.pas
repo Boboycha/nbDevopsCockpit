@@ -37,6 +37,7 @@ type
     TargetPath: string;
     SourceIsLocal: Boolean;
     TargetIsLocal: Boolean;
+    IsDir: Boolean;
   end;
 
   TnbSFTPTransferWorker = class(TThread)
@@ -54,16 +55,19 @@ type
     FTotal: Int64;
     FLastProgressTick: UInt64;
     FTracePath: string;
+    FIsDir: Boolean;
     procedure Summary(const AMsg: string);
     procedure Trace(const AMsg: string);
     procedure QueueProgress(AForce: Boolean = False);
+    procedure ExecuteFolder;
   protected
     procedure Execute; override;
   public
     constructor Create(AOwner: TnbSFTPTransfer;
       const ASourceInfo, ATargetInfo: TnbSFTPConnectionInfo;
       const ASourcePath, ATargetPath: string;
-      ASourceIsLocal: Boolean = False; ATargetIsLocal: Boolean = False);
+      ASourceIsLocal: Boolean = False; ATargetIsLocal: Boolean = False;
+      AIsDir: Boolean = False);
 
     property Error: string read FError;
   end;
@@ -92,11 +96,11 @@ type
     procedure ClearQueue;
 
     procedure Start(ASource: TnbSFTPClient; const ARemoteSrc: string;
-      ATarget: TnbSFTPClient; const ADstPath: string);
+      ATarget: TnbSFTPClient; const ADstPath: string; AIsDir: Boolean = False);
     procedure StartDownload(ASource: TnbSFTPClient;
-      const ARemotePath, ALocalPath: string);
+      const ARemotePath, ALocalPath: string; AIsDir: Boolean = False);
     procedure StartUpload(const ALocalPath: string;
-      ATarget: TnbSFTPClient; const ARemotePath: string);
+      ATarget: TnbSFTPClient; const ARemotePath: string; AIsDir: Boolean = False);
 
   published
     property OnProgress: TnbTransferProgressEvent read FOnProgress write FOnProgress;
@@ -114,9 +118,15 @@ const
   STREAM_BUFFER_SIZE = 8 * 1024 * 1024;
   PIPELINE_QUEUE_LIMIT = 8;
   PIPELINE_WAIT_MS = 50;
-  TARGET_WRITE_MODE_SSH_EXEC = True;
+  TARGET_WRITE_MODE_SSH_EXEC = False;
   TRANSFER_SUMMARY_ENABLED = True;
   TRANSFER_TRACE_ENABLED = False;
+  // libssh2 issues pipelined sub-requests when ssh2_sftp_read is called with a
+  // large count. If the file is smaller than the window, an EOF response for a
+  // "past-EOF" sub-request can arrive before the data response for the last
+  // real sub-request, causing sftp_read to return 0 prematurely and truncate
+  // the file. Reading in small independent chunks avoids this.
+  SFTP_READ_CHUNK = 32 * 1024;
 
 type
   TSSHSessionHandle = nbSSH.LibSSH2.PLIBSSH2_SESSION;
@@ -488,17 +498,19 @@ end;
 constructor TnbSFTPTransferWorker.Create(AOwner: TnbSFTPTransfer;
   const ASourceInfo, ATargetInfo: TnbSFTPConnectionInfo;
   const ASourcePath, ATargetPath: string;
-  ASourceIsLocal: Boolean = False; ATargetIsLocal: Boolean = False);
+  ASourceIsLocal: Boolean = False; ATargetIsLocal: Boolean = False;
+  AIsDir: Boolean = False);
 begin
   inherited Create(True);
   FreeOnTerminate := False;
-  FOwner := AOwner;
-  FSourceInfo := ASourceInfo;
-  FTargetInfo := ATargetInfo;
-  FSourcePath := ASourcePath;
-  FTargetPath := ATargetPath;
+  FOwner         := AOwner;
+  FSourceInfo    := ASourceInfo;
+  FTargetInfo    := ATargetInfo;
+  FSourcePath    := ASourcePath;
+  FTargetPath    := ATargetPath;
   FSourceIsLocal := ASourceIsLocal;
   FTargetIsLocal := ATargetIsLocal;
+  FIsDir         := AIsDir;
   if ASourceIsLocal then
     FStage := tpUpload
   else if ATargetIsLocal then
@@ -570,6 +582,263 @@ begin
     end);
 end;
 
+procedure TnbSFTPTransferWorker.ExecuteFolder;
+type
+  TFileItem = record
+    SrcPath: string;
+    DstPath: string;
+    Size: Int64;
+  end;
+
+  procedure ScanRemote(ASession: TnbSFTPRawSession;
+    const ASrcBase, ADstBase: string; var AItems: TArray<TFileItem>);
+  var
+    Entries: TSFTPEntryArray;
+    E: TSFTPEntry;
+    Item: TFileItem;
+  begin
+    if Terminated then Exit;
+    Entries := ASession.ListDir(ASrcBase);
+    for E in Entries do
+    begin
+      if Terminated then Exit;
+      if E.IsDir then
+        ScanRemote(ASession, ASrcBase + '/' + E.Name,
+          ADstBase + '/' + E.Name, AItems)
+      else
+      begin
+        Item.SrcPath := ASrcBase + '/' + E.Name;
+        Item.DstPath := ADstBase + '/' + E.Name;
+        Item.Size    := E.Size;
+        AItems := AItems + [Item];
+        Inc(FTotal, E.Size);
+      end;
+    end;
+  end;
+
+  procedure ScanLocal(const ASrcBase, ADstBase: string;
+    var AItems: TArray<TFileItem>);
+  var
+    Names: TArray<string>;
+    N: string;
+    Item: TFileItem;
+    Info: TSearchRec;
+  begin
+    if Terminated then Exit;
+    Names := TDirectory.GetFiles(ASrcBase);
+    for N in Names do
+    begin
+      Item.SrcPath := N;
+      Item.DstPath := ADstBase + '/' + ExtractFileName(N);
+      Item.Size    := TFile.GetSize(N);
+      AItems := AItems + [Item];
+      Inc(FTotal, Item.Size);
+    end;
+    Names := TDirectory.GetDirectories(ASrcBase);
+    for N in Names do
+    begin
+      if Terminated then Exit;
+      ScanLocal(N, ADstBase + '/' + ExtractFileName(N), AItems);
+    end;
+    Info := Default(TSearchRec);
+  end;
+
+  procedure EnsureDirs(ASession: TnbSFTPRawSession; const ABase: string;
+    AItems: TArray<TFileItem>);
+  var
+    Item: TFileItem;
+    Dir, Last: string;
+    Parts: TArray<string>;
+    I: Integer;
+    Path: string;
+  begin
+    Last := '';
+    for Item in AItems do
+    begin
+      Dir := ABase;
+      Parts := Item.DstPath.Replace('\', '/').Split(['/']);
+      // Parts has leading empty element when path starts with /
+      // Walk all but the last segment (file name)
+      Path := '';
+      for I := 0 to High(Parts) - 1 do
+      begin
+        if Parts[I] = '' then Continue;
+        Path := Path + '/' + Parts[I];
+      end;
+      if (Path <> '') and (Path <> Last) then
+      begin
+        if ASession <> nil then
+          ASession.MakeDir(Path);
+        Last := Path;
+      end;
+    end;
+  end;
+
+  procedure CopyOneFile(SrcSession, DstSession: TnbSFTPRawSession;
+    const AItem: TFileItem);
+  var
+    SrcHandle, DstHandle: PLIBSSH2_SFTP_HANDLE;
+    LocalSrc, LocalDst: TFileStream;
+    Buf: TBytes;
+    ReadLen, WriteLen, Offset: NativeInt;
+    RequestSize: NativeUInt;
+    Remaining: Int64;
+  begin
+    SrcHandle := nil;
+    DstHandle := nil;
+    LocalSrc  := nil;
+    LocalDst  := nil;
+    SetLength(Buf, STREAM_BUFFER_SIZE);
+    try
+      if FSourceIsLocal then
+        LocalSrc := TFileStream.Create(AItem.SrcPath, fmOpenRead or fmShareDenyWrite)
+      else
+        SrcHandle := SrcSession.OpenRead(AItem.SrcPath);
+
+      if FTargetIsLocal then
+      begin
+        TDirectory.CreateDirectory(TPath.GetDirectoryName(AItem.DstPath));
+        LocalDst := TFileStream.Create(AItem.DstPath, fmCreate);
+      end
+      else
+        DstHandle := DstSession.OpenWrite(AItem.DstPath);
+
+      Remaining := AItem.Size;
+      while not Terminated do
+      begin
+        if FSourceIsLocal then
+          ReadLen := LocalSrc.Read(Buf[0], Length(Buf))
+        else
+        begin
+          ReadLen := 0;
+          while ReadLen < Length(Buf) do
+          begin
+            if Remaining <= 0 then Break;
+            RequestSize := NativeUInt(Length(Buf) - ReadLen);
+            if NativeUInt(Remaining) < RequestSize then
+              RequestSize := NativeUInt(Remaining);
+            if RequestSize = 0 then Break;
+            WriteLen := SrcSession.Read(SrcHandle, Buf[ReadLen], RequestSize);
+            if WriteLen = 0 then Break;
+            Inc(ReadLen, WriteLen);
+            Dec(Remaining, WriteLen);
+          end;
+        end;
+        if ReadLen = 0 then Break;
+
+        Offset := 0;
+        while (Offset < ReadLen) and not Terminated do
+        begin
+          if FTargetIsLocal then
+            WriteLen := LocalDst.Write(Buf[Offset], ReadLen - Offset)
+          else
+            WriteLen := DstSession.Write(DstHandle, Buf[Offset], ReadLen - Offset);
+          if WriteLen = 0 then
+            raise Exception.Create('Write failed in folder transfer');
+          Inc(Offset, WriteLen);
+          Inc(FDone, WriteLen);
+          QueueProgress;
+        end;
+      end;
+    finally
+      if SrcHandle <> nil then SrcSession.CloseFile(SrcHandle);
+      if DstHandle <> nil then DstSession.CloseFile(DstHandle);
+      FreeAndNil(LocalSrc);
+      FreeAndNil(LocalDst);
+    end;
+  end;
+
+var
+  SrcSession, DstSession: TnbSFTPRawSession;
+  Items: TArray<TFileItem>;
+  Item: TFileItem;
+  CreatedDirs: TStringList;
+
+  // SFTP mkdir не создаёт промежуточные папки — создаём каждый компонент пути.
+  // Уже созданные кэшируем в CreatedDirs чтобы не делать лишних round-trip'ов.
+  procedure MkdirP(ASession: TnbSFTPRawSession; const APath: string);
+  var
+    Parts: TArray<string>;
+    I: Integer;
+    Built, Prefix: string;
+  begin
+    Prefix := '';
+    if APath.StartsWith('/') then Prefix := '/';
+    Parts := APath.TrimLeft(['/']).Split(['/']);
+    Built := '';
+    for I := 0 to High(Parts) do
+    begin
+      if Parts[I] = '' then Continue;
+      Built := IfThen(Built = '', Prefix + Parts[I], Built + '/' + Parts[I]);
+      if CreatedDirs.IndexOf(Built) < 0 then
+      begin
+        try ASession.MakeDir(Built); except end;
+        CreatedDirs.Add(Built);
+      end;
+    end;
+  end;
+
+begin
+  SrcSession  := nil;
+  DstSession  := nil;
+  CreatedDirs := TStringList.Create;
+  try
+    if not FSourceIsLocal then
+    begin
+      SrcSession := TnbSFTPRawSession.Create(FSourceInfo,
+        function: Boolean begin Result := Terminated; end, True);
+      SrcSession.Connect;
+    end;
+    if not FTargetIsLocal then
+    begin
+      DstSession := TnbSFTPRawSession.Create(FTargetInfo,
+        function: Boolean begin Result := Terminated; end, True);
+      DstSession.Connect;
+    end;
+
+    Items  := nil;
+    FTotal := 0;
+    FDone  := 0;
+    QueueProgress(True);
+
+    if FSourceIsLocal then
+      ScanLocal(FSourcePath, FTargetPath, Items)
+    else
+      ScanRemote(SrcSession, FSourcePath, FTargetPath, Items);
+
+    // Корневая папка назначения
+    if DstSession <> nil then
+      MkdirP(DstSession, FTargetPath);
+    if FTargetIsLocal then
+      TDirectory.CreateDirectory(FTargetPath);
+
+    for Item in Items do
+    begin
+      if Terminated then Break;
+      if DstSession <> nil then
+        MkdirP(DstSession, TPath.GetDirectoryName(
+          Item.DstPath).Replace('\', '/'))
+      else if FTargetIsLocal then
+        TDirectory.CreateDirectory(TPath.GetDirectoryName(Item.DstPath));
+      CopyOneFile(SrcSession, DstSession, Item);
+    end;
+  except
+    on E: Exception do
+      FError := E.Message;
+  end;
+  CreatedDirs.Free;
+  if SrcSession <> nil then
+  begin
+    SrcSession.AbortDisconnect;
+    SrcSession.Free;
+  end;
+  if DstSession <> nil then
+  begin
+    DstSession.AbortDisconnect;
+    DstSession.Free;
+  end;
+end;
+
 procedure TnbSFTPTransferWorker.Execute;
 var
   SourceSession, TargetSession: TnbSFTPRawSession;
@@ -626,6 +895,20 @@ var
     end;
   end;
 begin
+  if FIsDir then
+  begin
+    ExecuteFolder;
+    var OwnerRef := FOwner;
+    var ErrRef   := FError;
+    TThread.Queue(nil,
+      procedure
+      begin
+        if OwnerRef <> nil then
+          OwnerRef.WorkerFinished(Self, ErrRef);
+      end);
+    Exit;
+  end;
+
   SourceSession := nil;
   TargetSession := nil;
   TargetExec := nil;
@@ -759,17 +1042,54 @@ begin
       var
         ReadBuffer, Chunk: TBytes;
         LocalReadLen: NativeInt;
+        SftpChunkLen: NativeInt;
+        TotalRead: Int64;
+        RequestSize: NativeUInt;
       begin
         try
           SetLength(ReadBuffer, STREAM_BUFFER_SIZE);
+          TotalRead := 0;
           while not Terminated do
           begin
             ReadStarted := TraceTick;
             if FSourceIsLocal then
               LocalReadLen := LocalSourceStream.Read(ReadBuffer[0], Length(ReadBuffer))
             else
-              LocalReadLen := SourceSession.Read(SourceHandle, ReadBuffer[0],
-                Length(ReadBuffer));
+            begin
+              // Accumulate multiple sftp_read results into ReadBuffer before
+              // pushing to the queue (keeps write-side chunks up to 8 MB, same
+              // throughput as before the truncation fix).
+              //
+              // Each individual request is bounded by (FTotal - TotalRead) so
+              // libssh2 never issues sub-requests past EOF. Without that cap an
+              // uncapped 8 MB request causes libssh2 to pipeline beyond the
+              // file end; the server's EOF response for a beyond-file
+              // sub-request can overtake the data response for the last real
+              // sub-request, making sftp_read return 0 prematurely and
+              // silently truncate the tail.
+              //
+              // With the cap the request is still large (up to 8 MB), so
+              // libssh2 keeps many in-flight sub-requests but all within the
+              // real file range — full pipelining, no race, no truncation.
+              //
+              // When FTotal = 0 (server did not report size) we fall back to
+              // SFTP_READ_CHUNK (32 KB) per call to stay safe.
+              LocalReadLen := 0;
+              while (LocalReadLen < Length(ReadBuffer)) and not Terminated do
+              begin
+                if (FTotal > 0) and (TotalRead >= FTotal) then Break;
+                RequestSize := NativeUInt(Length(ReadBuffer) - LocalReadLen);
+                if (FTotal > 0) and (NativeUInt(FTotal - TotalRead) < RequestSize) then
+                  RequestSize := NativeUInt(FTotal - TotalRead);
+                if (FTotal = 0) and (RequestSize > SFTP_READ_CHUNK) then
+                  RequestSize := SFTP_READ_CHUNK;
+                SftpChunkLen := SourceSession.Read(SourceHandle,
+                  ReadBuffer[LocalReadLen], RequestSize);
+                if SftpChunkLen = 0 then Break;
+                Inc(LocalReadLen, SftpChunkLen);
+                Inc(TotalRead, SftpChunkLen);
+              end;
+            end;
             Inc(ReadMs, TraceTick - ReadStarted);
             if LocalReadLen = 0 then Break;
             Inc(ReadChunks);
@@ -844,7 +1164,6 @@ begin
         else
           FStage := tpStream;
         QueueProgress;
-        if (FTotal > 0) and (FDone >= FTotal) then Break;
       end;
     end;
 
@@ -858,6 +1177,10 @@ begin
     FreeAndNil(PipelineQueue);
     if ReaderError <> '' then
       raise Exception.Create(ReaderError);
+    if (FTotal > 0) and (FDone < FTotal) then
+      raise Exception.CreateFmt(
+        'Transfer incomplete: %d of %d bytes transferred (%d missing)',
+        [FDone, FTotal, FTotal - FDone]);
   except
     on E: EAbort do
       if not Terminated then
@@ -1053,7 +1376,8 @@ begin
 end;
 
 procedure TnbSFTPTransfer.Start(ASource: TnbSFTPClient;
-  const ARemoteSrc: string; ATarget: TnbSFTPClient; const ADstPath: string);
+  const ARemoteSrc: string; ATarget: TnbSFTPClient; const ADstPath: string;
+  AIsDir: Boolean);
 var
   Job: TnbSFTPTransferJob;
 begin
@@ -1063,6 +1387,7 @@ begin
   ATarget.ExportConnectionInfo(Job.TargetInfo);
   Job.SourcePath := ARemoteSrc;
   Job.TargetPath := ADstPath;
+  Job.IsDir      := AIsDir;
 
   if SameText(Job.SourceInfo.Host, Job.TargetInfo.Host) and
      SameText(Job.SourceInfo.Port, Job.TargetInfo.Port) and
@@ -1092,22 +1417,24 @@ begin
   else
     FPhase := tpStream;
   FWorker := TnbSFTPTransferWorker.Create(Self, AJob.SourceInfo, AJob.TargetInfo,
-    AJob.SourcePath, AJob.TargetPath, AJob.SourceIsLocal, AJob.TargetIsLocal);
+    AJob.SourcePath, AJob.TargetPath, AJob.SourceIsLocal, AJob.TargetIsLocal,
+    AJob.IsDir);
   FWorker.Start;
 end;
 
 procedure TnbSFTPTransfer.StartDownload(ASource: TnbSFTPClient;
-  const ARemotePath, ALocalPath: string);
+  const ARemotePath, ALocalPath: string; AIsDir: Boolean);
 var
   Job: TnbSFTPTransferJob;
 begin
   if ASource = nil then Exit;
   FillChar(Job, SizeOf(Job), 0);
   ASource.ExportConnectionInfo(Job.SourceInfo);
-  Job.SourcePath := ARemotePath;
-  Job.TargetPath := ALocalPath;
+  Job.SourcePath    := ARemotePath;
+  Job.TargetPath    := ALocalPath;
   Job.SourceIsLocal := False;
   Job.TargetIsLocal := True;
+  Job.IsDir         := AIsDir;
   if Busy then
     FQueue.Enqueue(Job)
   else
@@ -1115,17 +1442,18 @@ begin
 end;
 
 procedure TnbSFTPTransfer.StartUpload(const ALocalPath: string;
-  ATarget: TnbSFTPClient; const ARemotePath: string);
+  ATarget: TnbSFTPClient; const ARemotePath: string; AIsDir: Boolean);
 var
   Job: TnbSFTPTransferJob;
 begin
   if ATarget = nil then Exit;
   FillChar(Job, SizeOf(Job), 0);
-  Job.SourcePath := ALocalPath;
+  Job.SourcePath    := ALocalPath;
   ATarget.ExportConnectionInfo(Job.TargetInfo);
-  Job.TargetPath := ARemotePath;
+  Job.TargetPath    := ARemotePath;
   Job.SourceIsLocal := True;
   Job.TargetIsLocal := False;
+  Job.IsDir         := AIsDir;
   if Busy then
     FQueue.Enqueue(Job)
   else

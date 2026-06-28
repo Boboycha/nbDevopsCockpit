@@ -350,7 +350,7 @@ end;
 procedure TnbSFTPFileSource.Delete(const APath: string; AIsDir: Boolean);
 begin
   if AIsDir then
-    FClient.RemoveDir(APath)
+    FClient.DeleteDir(APath)
   else
     FClient.Delete(APath);
 end;

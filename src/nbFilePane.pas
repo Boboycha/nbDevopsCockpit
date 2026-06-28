@@ -60,6 +60,8 @@ type
     FBusyLabel: TLabel;
     FBusy: Boolean;
     FSelectedIndex: Integer;
+    FSelectedIndices: TList<Integer>;
+    FSelectionAnchor: Integer;
     FSortColumn: Integer;
     FSortDescending: Boolean;
     FSelectionColor: TAlphaColor;
@@ -81,6 +83,19 @@ type
     FOnError: TnbFileErrorEvent;
     FOnFileDrop: TnbFilePaneDropEvent;
     FOnOpenFile: TnbFilePaneOpenFileEvent;
+    FOnConfirmDelete: TFunc<string, Boolean>;
+    FBtnMkdir:  TnbToolButton;
+    FBtnRename: TnbToolButton;
+    FBtnDelete: TnbToolButton;
+    FLangNewFolderHint:  string;
+    FLangRenameHint:     string;
+    FLangDeleteHint:     string;
+    FLangNewFolderTitle: string;
+    FLangNewFolderLabel: string;
+    FLangRenameTitle:    string;
+    FLangRenameLabel:    string;
+    FLangDeleteSingle:   string;
+    FLangDeleteMany:     string;
     FDragArmed: Boolean;
     FDragging: Boolean;
     FDragStartScreen: TPointF;
@@ -154,12 +169,18 @@ type
     procedure Refresh;
     procedure ClearBusy;
     function  SelectedEntry(out AEntry: TnbFileEntry): Boolean;
+    function  SelectedEntries: TnbFileEntryArray;
     function  EntryExists(const AName: string; out AIsDir: Boolean): Boolean;
     function  CurrentPath: string;
     procedure ApplyColors(ABg, ASurface, ABorder, AText: TAlphaColor;
       AMuted: TAlphaColor = 0; AAccent: TAlphaColor = 0);
     procedure SetCaptions(const AName, ASize, AModified, AKind, AFolder,
       AFile, AParentFolder: string);
+    procedure SetActionStrings(
+      const AHintNewFolder, AHintRename, AHintDelete: string;
+      const ANewFolderTitle, ANewFolderLabel: string;
+      const ARenameTitle, ARenameLabel: string;
+      const ADeleteSingle, ADeleteMany: string);
     property BusyText: string read FBusyText write SetBusyText;
 
     (* Glyph кнопки передачи; пусто — кнопка скрыта. Клик → OnTransfer. *)
@@ -179,6 +200,8 @@ type
       read FOnFileDrop write FOnFileDrop;
     property OnOpenFile: TnbFilePaneOpenFileEvent
       read FOnOpenFile write FOnOpenFile;
+    property OnConfirmDelete: TFunc<string, Boolean>
+      read FOnConfirmDelete write FOnConfirmDelete;
   end;
 
 implementation
@@ -209,7 +232,9 @@ begin
     FInstances := TList<TnbFilePane>.Create;
   FInstances.Add(Self);
   FButtons := TList<TnbToolButton>.Create;
+  FSelectedIndices := TList<Integer>.Create;
   FSelectedIndex := -1;
+  FSelectionAnchor := -1;
   FSortColumn := FILE_SORT_NAME;
   FSortDescending := False;
   FColBg      := TAlphaColor($FF141820);
@@ -249,6 +274,7 @@ begin
     end;
   end;
   FButtons.Free;
+  FSelectedIndices.Free;
   inherited;
 end;
 
@@ -402,9 +428,18 @@ begin
 
   AddButton(#$2191, HandleUp,      'Вверх');
   AddButton('R',    HandleRefresh, 'Обновить');
-  AddButton('+',    HandleMkdir,   'Новая папка');
-  AddButton('N',    HandleRename,  'Переименовать');
-  AddButton('X',    HandleDelete,  'Удалить');
+  FLangNewFolderHint  := 'Новая папка';
+  FLangRenameHint     := 'Переименовать';
+  FLangDeleteHint     := 'Удалить';
+  FLangNewFolderTitle := 'Новая папка';
+  FLangNewFolderLabel := 'Имя';
+  FLangRenameTitle    := 'Переименовать';
+  FLangRenameLabel    := 'Новое имя';
+  FLangDeleteSingle   := 'Удалить "%s"?';
+  FLangDeleteMany     := 'Удалить %d элемент(ов)?';
+  FBtnMkdir  := AddButton('+', HandleMkdir,  FLangNewFolderHint);
+  FBtnRename := AddButton('N', HandleRename, FLangRenameHint);
+  FBtnDelete := AddButton('X', HandleDelete, FLangDeleteHint);
 
   FBreadcrumbBg := TRectangle.Create(Self);
   MarkInternalControl(FBreadcrumbBg);
@@ -585,6 +620,7 @@ begin
   RebuildBreadcrumbs(APath);
   FEntries := AEntries;
   FSelectedIndex := -1;
+  FSelectedIndices.Clear;
   SortEntries;
   FillList;
 end;
@@ -652,11 +688,14 @@ begin
   if Length(FEntries) = 0 then
   begin
     FSelectedIndex := -1;
+    FSelectedIndices.Clear;
     UpdateRowSelection;
     Exit;
   end;
-
   FSelectedIndex := EnsureRange(AIndex, 0, High(FEntries));
+  FSelectedIndices.Clear;
+  FSelectedIndices.Add(FSelectedIndex);
+  FSelectionAnchor := FSelectedIndex;
   UpdateRowSelection;
   EnsureSelectedVisible;
 end;
@@ -724,6 +763,20 @@ begin
     vkBack:
       begin
         HandleUp(Self);
+        Key := 0;
+      end;
+    Ord('A'):
+      if ssCtrl in Shift then
+      begin
+        FSelectedIndices.Clear;
+        for var I := 0 to High(FEntries) do
+          FSelectedIndices.Add(I);
+        if FSelectedIndices.Count > 0 then
+        begin
+          FSelectedIndex := 0;
+          FSelectionAnchor := 0;
+        end;
+        UpdateRowSelection;
         Key := 0;
       end;
   end;
@@ -984,6 +1037,26 @@ begin
     FillList;
 end;
 
+procedure TnbFilePane.SetActionStrings(
+  const AHintNewFolder, AHintRename, AHintDelete: string;
+  const ANewFolderTitle, ANewFolderLabel: string;
+  const ARenameTitle, ARenameLabel: string;
+  const ADeleteSingle, ADeleteMany: string);
+begin
+  FLangNewFolderHint  := AHintNewFolder;
+  FLangRenameHint     := AHintRename;
+  FLangDeleteHint     := AHintDelete;
+  FLangNewFolderTitle := ANewFolderTitle;
+  FLangNewFolderLabel := ANewFolderLabel;
+  FLangRenameTitle    := ARenameTitle;
+  FLangRenameLabel    := ARenameLabel;
+  FLangDeleteSingle   := ADeleteSingle;
+  FLangDeleteMany     := ADeleteMany;
+  if FBtnMkdir  <> nil then FBtnMkdir.Hint  := AHintNewFolder;
+  if FBtnRename <> nil then FBtnRename.Hint := AHintRename;
+  if FBtnDelete <> nil then FBtnDelete.Hint := AHintDelete;
+end;
+
 procedure TnbFilePane.HandleHeaderClick(Sender: TObject);
 var
   Column, I: Integer;
@@ -1014,12 +1087,15 @@ begin
 
   SortEntries;
   FSelectedIndex := -1;
+  FSelectedIndices.Clear;
   if HadSelection then
     for I := 0 to High(FEntries) do
       if (FEntries[I].IsDir = SelectedIsDir)
         and SameText(FEntries[I].Name, SelectedName) then
       begin
         FSelectedIndex := I;
+        FSelectedIndices.Add(I);
+        FSelectionAnchor := I;
         Break;
       end;
 
@@ -1039,6 +1115,19 @@ begin
   if (Idx < 0) or (Idx > High(FEntries)) then Exit;
   AEntry := FEntries[Idx];
   Result := True;
+end;
+
+function TnbFilePane.SelectedEntries: TnbFileEntryArray;
+var
+  I, Idx: Integer;
+begin
+  Result := nil;
+  for I := 0 to FSelectedIndices.Count - 1 do
+  begin
+    Idx := FSelectedIndices[I];
+    if (Idx >= 0) and (Idx <= High(FEntries)) then
+      Result := Result + [FEntries[Idx]];
+  end;
 end;
 
 function TnbFilePane.EntryExists(const AName: string;
@@ -1084,21 +1173,65 @@ procedure TnbFilePane.HandleRowMouseDown(Sender: TObject;
 var
   Entry: TnbFileEntry;
   Ctrl: TControl;
+  TagValue, Anchor, Lo, Hi, I: Integer;
 begin
   if CanFocus then
     SetFocus;
   FDragSource := nil;
   FDragArmed := False;
   FDragging := False;
-  SelectRowFromObject(Sender);
+
+  TagValue := -1;
+  if Sender is TFmxObject then
+    TagValue := TFmxObject(Sender).Tag;
+
+  if (ssCtrl in Shift) and (TagValue <> PARENT_ENTRY_TAG)
+    and (TagValue >= 0) and (TagValue <= High(FEntries)) then
+  begin
+    TagValue := EnsureRange(TagValue, 0, High(FEntries));
+    if FSelectedIndices.Contains(TagValue) then
+    begin
+      FSelectedIndices.Remove(TagValue);
+      if FSelectedIndex = TagValue then
+      begin
+        if FSelectedIndices.Count > 0 then
+          FSelectedIndex := FSelectedIndices[FSelectedIndices.Count - 1]
+        else
+          FSelectedIndex := -1;
+      end;
+    end
+    else
+    begin
+      FSelectedIndices.Add(TagValue);
+      FSelectedIndex := TagValue;
+      FSelectionAnchor := TagValue;
+    end;
+    UpdateRowSelection;
+  end
+  else if (ssShift in Shift) and (TagValue <> PARENT_ENTRY_TAG)
+    and (TagValue >= 0) and (TagValue <= High(FEntries)) then
+  begin
+    TagValue := EnsureRange(TagValue, 0, High(FEntries));
+    Anchor := FSelectionAnchor;
+    if Anchor < 0 then Anchor := 0;
+    FSelectedIndices.Clear;
+    Lo := Min(Anchor, TagValue);
+    Hi := Max(Anchor, TagValue);
+    for I := Lo to Hi do
+      FSelectedIndices.Add(I);
+    FSelectedIndex := TagValue;
+    UpdateRowSelection;
+  end
+  else
+    SelectRowFromObject(Sender);
+
   if FSelectedIndex = PARENT_ENTRY_TAG then
   begin
     if Assigned(FOnActivated) then
       FOnActivated(Self);
     Exit;
   end;
-  if (Button = TMouseButton.mbLeft) and SelectedEntry(Entry)
-    and (not Entry.IsDir) then
+  if (Button = TMouseButton.mbLeft) and SelectedEntry(Entry) then
   begin
     FDragSource := Self;
     FDragArmed := True;
@@ -1217,9 +1350,17 @@ begin
     Obj := TFmxObject(AObject);
     TagValue := Obj.Tag;
     if TagValue = PARENT_ENTRY_TAG then
-      FSelectedIndex := PARENT_ENTRY_TAG
+    begin
+      FSelectedIndex := PARENT_ENTRY_TAG;
+      FSelectedIndices.Clear;
+    end
     else
+    begin
       FSelectedIndex := EnsureRange(TagValue, 0, High(FEntries));
+      FSelectedIndices.Clear;
+      FSelectedIndices.Add(FSelectedIndex);
+      FSelectionAnchor := FSelectedIndex;
+    end;
   end;
   UpdateRowSelection;
 end;
@@ -1237,7 +1378,8 @@ begin
     Item := FList.ListItems[I];
     Item.StyledSettings := Item.StyledSettings - [TStyledSetting.FontColor];
     Item.TextSettings.FontColor := FColText;
-    Item.IsSelected := Item.Tag = FSelectedIndex;
+    Item.IsSelected := (Item.Tag = FSelectedIndex)
+      or FSelectedIndices.Contains(Item.Tag);
     RowBg := nil;
     for J := 0 to Item.ChildrenCount - 1 do
     begin
@@ -1276,7 +1418,8 @@ begin
   if FSource = nil then Exit;
   SetLength(Values, 1);
   Values[0] := '';
-  if InputQuery('Новая папка', ['Имя'], Values) and (Trim(Values[0]) <> '') then
+  if InputQuery(FLangNewFolderTitle, [FLangNewFolderLabel], Values)
+    and (Trim(Values[0]) <> '') then
     FSource.MakeDir(FSource.Combine(FPath, Trim(Values[0])));
 end;
 
@@ -1288,7 +1431,7 @@ begin
   if (FSource = nil) or (not SelectedEntry(Entry)) then Exit;
   SetLength(Values, 1);
   Values[0] := Entry.Name;
-  if InputQuery('Переименовать', ['Новое имя'], Values)
+  if InputQuery(FLangRenameTitle, [FLangRenameLabel], Values)
     and (Trim(Values[0]) <> '') and (Trim(Values[0]) <> Entry.Name) then
     FSource.Rename(FSource.Combine(FPath, Entry.Name),
                    FSource.Combine(FPath, Trim(Values[0])));
@@ -1296,12 +1439,26 @@ end;
 
 procedure TnbFilePane.HandleDelete(Sender: TObject);
 var
+  Entries: TnbFileEntryArray;
   Entry: TnbFileEntry;
+  Msg: string;
 begin
-  if (FSource = nil) or (not SelectedEntry(Entry)) then Exit;
-  if MessageDlg(Format('Удалить "%s"?', [Entry.Name]),
-    TMsgDlgType.mtConfirmation, [TMsgDlgBtn.mbYes, TMsgDlgBtn.mbNo], 0) = mrYes then
-    FSource.Delete(FSource.Combine(FPath, Entry.Name), Entry.IsDir);
+  if FSource = nil then Exit;
+  Entries := SelectedEntries;
+  if Length(Entries) = 0 then Exit;
+  if Length(Entries) = 1 then
+    Msg := Format(FLangDeleteSingle, [Entries[0].Name])
+  else
+    Msg := Format(FLangDeleteMany, [Length(Entries)]);
+  var Confirmed: Boolean;
+  if Assigned(FOnConfirmDelete) then
+    Confirmed := FOnConfirmDelete(Msg)
+  else
+    Confirmed := MessageDlg(Msg, TMsgDlgType.mtConfirmation,
+      [TMsgDlgBtn.mbYes, TMsgDlgBtn.mbNo], 0) = mrYes;
+  if Confirmed then
+    for Entry in Entries do
+      FSource.Delete(FSource.Combine(FPath, Entry.Name), Entry.IsDir);
 end;
 
 procedure TnbFilePane.HandleTransfer(Sender: TObject);
