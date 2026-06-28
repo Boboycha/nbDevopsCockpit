@@ -11,7 +11,7 @@ const
   FILE_ICON_UP         = 'up';
   FILE_ICON_REFRESH    = 'refresh';
   FILE_ICON_NEW_FOLDER = 'plus';
-  FILE_ICON_RENAME     = 'edit';
+  FILE_ICON_RENAME     = 'rename';
   FILE_ICON_DELETE     = 'delete';
   FILE_ICON_UPLOAD     = 'upload';
   FILE_ICON_DOWNLOAD   = 'download';

@@ -51,8 +51,9 @@ begin
     Exit('save');
   if ContainsText(S, 'delete') or ContainsText(H, 'удал') then
     Exit('delete');
-  if ContainsText(S, 'edit') or ContainsText(S, 'rename') or
-    ContainsText(H, 'редакт') or ContainsText(H, 'переимен') then
+  if ContainsText(S, 'rename') or ContainsText(H, 'переимен') then
+    Exit('rename');
+  if ContainsText(S, 'edit') or ContainsText(H, 'редакт') then
     Exit('edit');
   if ContainsText(S, 'copy') or ContainsText(H, 'копир') then
     Exit('copy');
@@ -132,6 +133,17 @@ begin
     APath.Data := 'M 20.3 7.7 L 8 20 L 4 21 L 5 17 L 17.3 4.7 ' +
       'C 17.7 4.3 18.3 4.3 18.7 4.7 L 20.3 6.3 C 20.7 6.7 20.7 7.3 20.3 7.7 Z ' +
       'M 15 7 L 18 10'
+  else if N = 'rename' then
+  begin
+    AFill := True;
+    APath.Data := 'M 10 4 L 8 4 L 8 6 L 5 6 C 3.34315 6 2 7.34315 2 9 L 2 15 ' +
+      'C 2 16.6569 3.34315 18 5 18 L 8 18 L 8 20 L 10 20 L 10 4 Z ' +
+      'M 8 8 L 8 16 L 5 16 C 4.44772 16 4 15.5523 4 15 L 4 9 ' +
+      'C 4 8.44772 4.44772 8 5 8 L 8 8 Z ' +
+      'M 19 16 L 12 16 L 12 18 L 19 18 C 20.6569 18 22 16.6569 22 15 L 22 9 ' +
+      'C 22 7.34315 20.6569 6 19 6 L 12 6 L 12 8 L 19 8 ' +
+      'C 19.5523 8 20 8.44771 20 9 L 20 15 C 20 15.5523 19.5523 16 19 16 Z'
+  end
   else if N = 'copy' then
     APath.Data := 'M 10 9 L 19 9 C 19.55 9 20 9.45 20 10 L 20 19 C 20 19.55 19.55 20 19 20 L 10 20 ' +
       'C 9.45 20 9 19.55 9 19 L 9 10 C 9 9.45 9.45 9 10 9 Z ' +
