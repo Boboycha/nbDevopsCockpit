@@ -430,17 +430,17 @@ begin
   FToolBar.Height := 34;
   FToolBar.Margins.Rect := RectF(0, 0, 0, 0);
 
-  AddButton(#$2191, HandleUp,      'Вверх');
-  AddButton('R',    HandleRefresh, 'Обновить');
-  FLangNewFolderHint  := 'Новая папка';
-  FLangRenameHint     := 'Переименовать';
-  FLangDeleteHint     := 'Удалить';
-  FLangNewFolderTitle := 'Новая папка';
-  FLangNewFolderLabel := 'Имя';
-  FLangRenameTitle    := 'Переименовать';
-  FLangRenameLabel    := 'Новое имя';
-  FLangDeleteSingle   := 'Удалить "%s"?';
-  FLangDeleteMany     := 'Удалить %d элемент(ов)?';
+  AddButton(#$2191, HandleUp,      'Up');
+  AddButton('R',    HandleRefresh, 'Refresh');
+  FLangNewFolderHint  := 'New folder';
+  FLangRenameHint     := 'Rename';
+  FLangDeleteHint     := 'Delete';
+  FLangNewFolderTitle := 'New folder';
+  FLangNewFolderLabel := 'Name';
+  FLangRenameTitle    := 'Rename';
+  FLangRenameLabel    := 'New name';
+  FLangDeleteSingle   := 'Delete "%s"?';
+  FLangDeleteMany     := 'Delete %d item(s)?';
   FBtnMkdir  := AddButton('+', HandleMkdir,  FLangNewFolderHint);
   FBtnRename := AddButton('N', HandleRename, FLangRenameHint);
   FBtnDelete := AddButton('X', HandleDelete, FLangDeleteHint);

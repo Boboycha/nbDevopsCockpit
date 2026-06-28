@@ -91,11 +91,11 @@ end;
 function FormatFileSize(ASize: Int64): string;
 begin
   if ASize < 1024 then
-    Result := ASize.ToString + ' Б'
+    Result := ASize.ToString + ' B'
   else if ASize < 1024 * 1024 then
-    Result := Format('%.1f КБ', [ASize / 1024])
+    Result := Format('%.1f KB', [ASize / 1024])
   else
-    Result := Format('%.1f МБ', [ASize / 1024 / 1024]);
+    Result := Format('%.1f MB', [ASize / 1024 / 1024]);
 end;
 
 function FormatFileModified(ADate: TDateTime): string;
@@ -144,11 +144,11 @@ end;
 function FileHeaderBaseCaption(AColumn: Integer): string;
 begin
   case AColumn of
-    FILE_SORT_DATE: Result := 'ИЗМЕНЁН';
-    FILE_SORT_SIZE: Result := 'РАЗМЕР';
-    FILE_SORT_KIND: Result := 'ТИП';
+    FILE_SORT_DATE: Result := 'MODIFIED';
+    FILE_SORT_SIZE: Result := 'SIZE';
+    FILE_SORT_KIND: Result := 'KIND';
   else
-    Result := 'ИМЯ';
+    Result := 'NAME';
   end;
 end;
 

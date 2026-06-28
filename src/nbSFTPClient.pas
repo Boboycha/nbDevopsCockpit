@@ -1389,7 +1389,7 @@ procedure TSFTPWorkerThread.CmdDeleteDirRecursive(const ARemotePath: string);
           0, 0, LIBSSH2_SFTP_OPENDIR);
       end));
     if Handle = nil then
-      raise Exception.CreateFmt('DeleteDir: не удалось открыть "%s": %s',
+      raise Exception.CreateFmt('DeleteDir: failed to open "%s": %s',
         [APath, GetSFTPError]);
     SetLength(Buf, 1024);
     SetLength(LongBuf, 2048);
@@ -1411,7 +1411,7 @@ procedure TSFTPWorkerThread.CmdDeleteDirRecursive(const ARemotePath: string);
             and Assigned(ssh2_sftp_last_error)
             and (ssh2_sftp_last_error(FSFTP) = LIBSSH2_FX_EOF) then
             Break;
-          raise Exception.Create('DeleteDir: ошибка чтения папки: ' + GetSFTPError);
+          raise Exception.Create('DeleteDir: failed to read directory: ' + GetSFTPError);
         end;
         SetString(NameA, PAnsiChar(@Buf[0]), ReadLen);
         if (NameA = '.') or (NameA = '..') then Continue;
@@ -1535,7 +1535,7 @@ begin
   if FWorker = nil then
   begin
     if Assigned(FOnError) then
-      FOnError(Self, 'Нет подключения');
+      FOnError(Self, 'Not connected');
     Exit;
   end;
   Cmd.Kind := AKind;
