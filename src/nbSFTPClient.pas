@@ -242,6 +242,8 @@ const
 type
   PLIBSSH2_SFTP_ATTRIBUTES = ^TLIBSSH2_SFTP_ATTRIBUTES;
   TLIBSSH2_SFTP_ATTRIBUTES = record
+{$IFDEF MSWINDOWS}
+    (* Windows: unsigned long = 4 байта (LLP64) *)
     flags: Cardinal;
     filesize: UInt64;
     uid: Cardinal;
@@ -249,6 +251,16 @@ type
     permissions: Cardinal;
     atime: Cardinal;
     mtime: Cardinal;
+{$ELSE}
+    (* Linux/macOS: unsigned long = 8 байт (LP64) *)
+    flags: UInt64;
+    filesize: UInt64;
+    uid: UInt64;
+    gid: UInt64;
+    permissions: UInt64;
+    atime: UInt64;
+    mtime: UInt64;
+{$ENDIF}
   end;
 
   Tlibssh2_init = function(flags: Integer): Integer; cdecl;

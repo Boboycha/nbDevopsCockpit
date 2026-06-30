@@ -1574,6 +1574,7 @@ var
 begin
   if (ASource = nil) or (ATarget = nil) then Exit;
 
+  FillChar(Job, SizeOf(Job), 0);
   ASource.ExportConnectionInfo(Job.SourceInfo);
   ATarget.ExportConnectionInfo(Job.TargetInfo);
   Job.SourcePath := ARemoteSrc;
