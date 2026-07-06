@@ -341,14 +341,22 @@ end;
 procedure TnbTerminalControl.Draw(const Canvas: ISkCanvas; const Dest: TRectF; const Opacity: Single);
 var
   ScreenSvc: IFMXScreenService;
-  DPIScale: Single;
+  DPIScale, AncestorScale: Single;
 begin
   inherited;
   DPIScale := 1.0;
   if TPlatformServices.Current.SupportsPlatformService(IFMXScreenService, ScreenSvc) then
     DPIScale := ScreenSvc.GetScreenScale;
 
-  FRenderer.Scale := DPIScale;
+  (* AbsoluteScale учитывает суммарный масштаб от всех предков (включая
+     Panel1.Scale в nbFleet) - без этого back-buffer рендерился в фиксированном
+     DPI-разрешении, а затем растягивался под текущий масштаб как обычный
+     bitmap, отсюда размытие текста при Panel1.Scale <> 1. *)
+  AncestorScale := Max(Abs(AbsoluteScale.X), Abs(AbsoluteScale.Y));
+  if AncestorScale <= 0 then
+    AncestorScale := 1.0;
+
+  FRenderer.Scale := DPIScale * AncestorScale;
   UpdateTerminalSize(True);
 
   FRenderer.Render(Canvas, Dest);
