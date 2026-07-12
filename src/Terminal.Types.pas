@@ -6,6 +6,8 @@ uses
   System.SysUtils, System.Classes, System.UITypes, System.Types, Terminal.Theme;
 
 type
+  TTerminalColorSource = (tcsDefault, tcsAnsi, tcsIndexed, tcsRGB);
+
   // Атрибуты символа
   TCharAttributes = record
     Bold: Boolean;
@@ -18,6 +20,10 @@ type
     Strikethrough: Boolean;
     ForegroundColor: TAlphaColor;
     BackgroundColor: TAlphaColor;
+    ForegroundSource: TTerminalColorSource;
+    BackgroundSource: TTerminalColorSource;
+    ForegroundIndex: Byte;
+    BackgroundIndex: Byte;
     procedure Reset(ATheme: TTerminalTheme);
     class function Default(ATheme: TTerminalTheme): TCharAttributes; static;
   end;
@@ -30,12 +36,24 @@ type
     Width: Byte;  // 0 = продолжение wide-символа, 1 = обычный, 2 = wide
   end;
 
-  TTerminalLine = array of TTerminalChar;
+  TTerminalCells = array of TTerminalChar;
+
+  // Физическая строка экрана. IsWrapped означает, что следующая строка
+  // является продолжением этой же логической строки (soft wrap), а не
+  // результатом CR/LF. Без этого метаданных корректный reflow невозможен.
+  TTerminalLine = record
+    Cells: TTerminalCells;
+    IsWrapped: Boolean;
+  end;
+
+  TTerminalCursorShape = (tcsBlock, tcsUnderline, tcsBar);
 
   TTerminalCursor = record
     X: Integer;
     Y: Integer;
     Visible: Boolean;
+    Shape: TTerminalCursorShape;
+    Blink: Boolean;
   end;
 
   TMouseTrackingMode = (
@@ -64,7 +82,51 @@ type
 implementation
 
 uses
-  System.Math;
+  System.Math, System.Character;
+
+type
+  TCodePointRange = record
+    First, Last: Cardinal;
+  end;
+
+const
+  CWideRanges: array[0..20] of TCodePointRange = (
+    (First: $1100; Last: $115F), (First: $11A3; Last: $11A7),
+    (First: $11FA; Last: $11FF), (First: $2300; Last: $23FF),
+    (First: $2600; Last: $27BF), (First: $2E80; Last: $2EFF),
+    (First: $2F00; Last: $2FDF), (First: $3000; Last: $30FF),
+    (First: $3100; Last: $33FF), (First: $3400; Last: $4DBF),
+    (First: $4E00; Last: $9FFF), (First: $A000; Last: $A4CF),
+    (First: $AC00; Last: $D7AF), (First: $F900; Last: $FAFF),
+    (First: $FE10; Last: $FE1F), (First: $FE30; Last: $FE4F),
+    (First: $FF00; Last: $FF60), (First: $FFE0; Last: $FFE6),
+    (First: $1F300; Last: $1FAFF),
+    (First: $20000; Last: $2FFFD),
+    (First: $30000; Last: $3FFFD));
+  CEmojiRanges: array[0..4] of TCodePointRange = (
+    (First: $203C; Last: $203C), (First: $2049; Last: $2049),
+    (First: $2600; Last: $27BF), (First: $2B00; Last: $2BFF),
+    (First: $1F000; Last: $1FAFF));
+
+function InCodePointRanges(Code: Cardinal;
+  const Ranges: array of TCodePointRange): Boolean;
+var
+  L, H, M: Integer;
+begin
+  L := 0;
+  H := High(Ranges);
+  while L <= H do
+  begin
+    M := L + (H - L) div 2;
+    if Code < Ranges[M].First then
+      H := M - 1
+    else if Code > Ranges[M].Last then
+      L := M + 1
+    else
+      Exit(True);
+  end;
+  Result := False;
+end;
 
 { TCharAttributes }
 
@@ -80,6 +142,10 @@ begin
   Strikethrough := False;
   ForegroundColor := ATheme.DefaultFG;
   BackgroundColor := ATheme.DefaultBG;
+  ForegroundSource := tcsDefault;
+  BackgroundSource := tcsDefault;
+  ForegroundIndex := 0;
+  BackgroundIndex := 0;
 end;
 
 class function TCharAttributes.Default(ATheme: TTerminalTheme): TCharAttributes;
@@ -106,13 +172,16 @@ end;
 function IsZeroWidthChar(const Ch: string): Boolean;
 var
   Code: Cardinal;
+  Category: TUnicodeCategory;
 begin
   if Length(Ch) = 0 then Exit(True);
   
   Code := GetCodePoint(Ch);
+  Category := Char.GetUnicodeCategory(UCS4Char(Code));
   
-  // Zero-width символы
-  Result := 
+  Result := (Category in [TUnicodeCategory.ucCombiningMark,
+    TUnicodeCategory.ucEnclosingMark, TUnicodeCategory.ucNonSpacingMark])
+    or
     (Code = $200B) or  // Zero Width Space
     (Code = $200C) or  // Zero Width Non-Joiner
     (Code = $200D) or  // Zero Width Joiner (ZWJ)
@@ -136,78 +205,30 @@ begin
 
   Code := GetCodePoint(Ch);
 
-  // Диапазоны эмодзи (CJK-иероглифы сюда НЕ попадают)
-  Result :=
-    ((Code >= $1F000) and (Code <= $1FAFF)) or  // Emoji, символы, доп. символы
-    ((Code >= $2600)  and (Code <= $27BF))  or  // Misc symbols + Dingbats
-    ((Code >= $2B00)  and (Code <= $2BFF))  or  // Misc symbols and arrows
-    ((Code >= $1F1E6) and (Code <= $1F1FF)) or  // Regional indicators
-    (Code = $203C) or (Code = $2049);           // двойные знаки препинания
+  Result := InCodePointRanges(Code, CEmojiRanges);
 end;
 
 function GetCharDisplayWidth(const Ch: string): Integer;
 var
   Code: Cardinal;
+  I: Integer;
 begin
   if Length(Ch) = 0 then Exit(0);
-  
-  // Для ZWJ-последовательностей (несколько символов склеенных) 
-  // возвращаем 2 — эмодзи обычно wide
-  if Length(Ch) > 2 then Exit(2);
+
+  if Length(Ch) > 1 then
+    for I := 1 to Length(Ch) do
+      if (Ord(Ch[I]) = $200D) or (Ord(Ch[I]) = $FE0F) then
+        Exit(2);
   
   Code := GetCodePoint(Ch);
   
   // Zero-width
   if IsZeroWidthChar(Ch) then Exit(0);
   
-  // Control characters
-  if Code < 32 then Exit(0);
-  
-  // Wide character ranges
-  if // Hangul Jamo
-     ((Code >= $1100) and (Code <= $115F)) or
-     ((Code >= $11A3) and (Code <= $11A7)) or
-     ((Code >= $11FA) and (Code <= $11FF)) or
-     // Miscellaneous symbols, Dingbats, Emoticons
-     ((Code >= $2300) and (Code <= $23FF)) or
-     ((Code >= $2600) and (Code <= $27BF)) or
-     // CJK Radicals
-     ((Code >= $2E80) and (Code <= $2EFF)) or
-     // Kangxi Radicals
-     ((Code >= $2F00) and (Code <= $2FDF)) or
-     // CJK Symbols and Punctuation
-     ((Code >= $3000) and (Code <= $303F)) or
-     // Hiragana, Katakana
-     ((Code >= $3040) and (Code <= $30FF)) or
-     // Bopomofo, Hangul Compat Jamo, Kanbun
-     ((Code >= $3100) and (Code <= $319F)) or
-     // Enclosed CJK Letters
-     ((Code >= $3200) and (Code <= $32FF)) or
-     // CJK Compatibility
-     ((Code >= $3300) and (Code <= $33FF)) or
-     // CJK Unified Ideographs Extension A
-     ((Code >= $3400) and (Code <= $4DBF)) or
-     // CJK Unified Ideographs
-     ((Code >= $4E00) and (Code <= $9FFF)) or
-     // Yi Syllables and Radicals
-     ((Code >= $A000) and (Code <= $A4CF)) or
-     // Hangul Syllables
-     ((Code >= $AC00) and (Code <= $D7AF)) or
-     // CJK Compatibility Ideographs
-     ((Code >= $F900) and (Code <= $FAFF)) or
-     // Vertical Forms
-     ((Code >= $FE10) and (Code <= $FE1F)) or
-     // CJK Compatibility Forms
-     ((Code >= $FE30) and (Code <= $FE4F)) or
-     // Fullwidth Forms
-     ((Code >= $FF00) and (Code <= $FF60)) or
-     ((Code >= $FFE0) and (Code <= $FFE6)) or
-     // CJK Ext B, C, D, E, F
-     ((Code >= $20000) and (Code <= $2FFFD)) or
-     ((Code >= $30000) and (Code <= $3FFFD)) or
-     // Emoji (most are wide)
-     ((Code >= $1F300) and (Code <= $1F9FF)) or
-     ((Code >= $1FA00) and (Code <= $1FAFF)) then
+  if Char.GetUnicodeCategory(UCS4Char(Code)) = TUnicodeCategory.ucControl then
+    Exit(0);
+
+  if InCodePointRanges(Code, CWideRanges) then
     Result := 2
   else
     Result := 1;

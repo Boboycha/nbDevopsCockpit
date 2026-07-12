@@ -42,7 +42,7 @@ class function TTerminalInput.TranslateKey(Key: Word; KeyChar: WideChar;
   function SS3Key(const FinalChar: Char): string;
   begin
     if HasKeyModifier then
-      Result := Format(#27'[1;%d%s', [ModifierParam, string(FinalChar)])
+      Result := #27'[1;' + IntToStr(ModifierParam) + FinalChar
     else
       Result := #27 + 'O' + FinalChar;
   end;
@@ -50,7 +50,7 @@ class function TTerminalInput.TranslateKey(Key: Word; KeyChar: WideChar;
   function CSIKey(const FinalChar: Char): string;
   begin
     if HasKeyModifier then
-      Result := Format(#27'[1;%d%s', [ModifierParam, string(FinalChar)])
+      Result := #27'[1;' + IntToStr(ModifierParam) + FinalChar
     else
       Result := #27 + '[' + FinalChar;
   end;
@@ -58,17 +58,46 @@ class function TTerminalInput.TranslateKey(Key: Word; KeyChar: WideChar;
   function TildeKey(const Code: Integer): string;
   begin
     if HasKeyModifier then
-      Result := Format(#27'[%d;%d~', [Code, ModifierParam])
+      Result := #27'[' + IntToStr(Code) + ';' + IntToStr(ModifierParam) + '~'
     else
-      Result := Format(#27'[%d~', [Code]);
+      Result := #27'[' + IntToStr(Code) + '~';
+  end;
+
+  function ControlCharacter: string;
+  var
+    C: WideChar;
+  begin
+    Result := '';
+    if not (ssCtrl in Shift) then
+      Exit;
+
+    if (Key >= Ord('A')) and (Key <= Ord('Z')) then
+      C := WideChar(Key - Ord('A') + 1)
+    else
+      case KeyChar of
+        ' ', '@': C := #0;
+        'a'..'z': C := WideChar(Ord(KeyChar) - Ord('a') + 1);
+        'A'..'Z': C := WideChar(Ord(KeyChar) - Ord('A') + 1);
+        '[': C := #27;
+        '\': C := #28;
+        ']': C := #29;
+        '^': C := #30;
+        '_': C := #31;
+        '?': C := #127;
+      else
+        Exit;
+      end;
+    Result := string(C);
   end;
 
 begin
   Result := '';
 
-  if (ssCtrl in Shift) and (Key >= Ord('A')) and (Key <= Ord('Z')) then
+  Result := ControlCharacter;
+  if Result <> '' then
   begin
-    Result := string(Char(Key - Ord('A') + 1));
+    if ssAlt in Shift then
+      Result := #27 + Result;
     Exit;
   end;
 
@@ -82,7 +111,15 @@ begin
     vkReturn: Result := #13;
     vkBack: Result := #127;
     vkTab:
-      if ssShift in Shift then Result := #27 + '[Z' else Result := #9;
+      if ssShift in Shift then
+      begin
+        if (Shift * [ssAlt, ssCtrl]) <> [] then
+          Result := CSIKey('Z')
+        else
+          Result := #27 + '[Z';
+      end
+      else
+        Result := #9;
     vkEscape: Result := #27;
 
     vkUp:
@@ -102,8 +139,16 @@ begin
       else if AppCursorKeys then Result := #27 + 'OD'
       else Result := #27 + '[D';
 
-    vkHome: Result := CSIKey('H');
-    vkEnd: Result := CSIKey('F');
+    vkHome:
+      if AppCursorKeys and not HasKeyModifier then
+        Result := SS3Key('H')
+      else
+        Result := CSIKey('H');
+    vkEnd:
+      if AppCursorKeys and not HasKeyModifier then
+        Result := SS3Key('F')
+      else
+        Result := CSIKey('F');
     vkInsert: Result := TildeKey(2);
     vkDelete: Result := TildeKey(3);
     vkPrior: Result := TildeKey(5);
@@ -132,8 +177,17 @@ class function TTerminalInput.BuildMouseReport(AButton, ACol, ARow: Integer;
   AMouseModes: TMouseTrackingModes): string;
 var
   Cb, Cx, Cy, ShiftMod: Integer;
+
+  function SGRReport(const Button: Integer; const FinalChar: Char): string;
+  begin
+    Result := #27'[<' + IntToStr(Button) + ';' + IntToStr(Cx) + ';' +
+      IntToStr(Cy) + FinalChar;
+  end;
+
 begin
   Result := '';
+  Cx := Max(1, ACol);
+  Cy := Max(1, ARow);
   ShiftMod := 0;
   if ssShift in AShift then Inc(ShiftMod, 4);
   if ssAlt in AShift then Inc(ShiftMod, 8);
@@ -144,12 +198,13 @@ begin
     Cb := AButton + ShiftMod;
     case AState of
       mbsDown:
-        Result := Format(#27'[<%d;%d;%dM', [Cb, ACol, ARow]);
+        Result := SGRReport(Cb, 'M');
       mbsUp:
-        Result := Format(#27'[<%d;%d;%dm', [Cb, ACol, ARow]);
+        Result := SGRReport(Cb, 'm');
       mbsMove:
-        if mtm1003_Any in AMouseModes then
-          Result := Format(#27'[<%d;%d;%dM', [Cb, ACol, ARow]);
+        if (mtm1003_Any in AMouseModes) or
+          ((mtm1002_Wheel in AMouseModes) and InRange(AButton, 0, 2)) then
+          Result := SGRReport(Cb + 32, 'M');
     end;
   end
   else if (mtm1000_Click in AMouseModes) or
@@ -160,7 +215,9 @@ begin
       Cb := 64
     else if (AButton = 65) and (mtm1002_Wheel in AMouseModes) then
       Cb := 65
-    else if (AState = mbsMove) and (mtm1003_Any in AMouseModes) then
+    else if (AState = mbsMove) and
+      ((mtm1003_Any in AMouseModes) or
+      ((mtm1002_Wheel in AMouseModes) and InRange(AButton, 0, 2))) then
       Cb := AButton + 32
     else if AState = mbsUp then
       Cb := 3
@@ -170,8 +227,8 @@ begin
       Exit;
 
     Cb := Cb + ShiftMod;
-    Cx := Min(Max(1, ACol), 255 - 32) + 32;
-    Cy := Min(Max(1, ARow), 255 - 32) + 32;
+    Cx := Min(Cx, 255 - 32) + 32;
+    Cy := Min(Cy, 255 - 32) + 32;
 
     Result := #27'[' + 'M' + Char(Cb + 32) + Char(Cx) + Char(Cy);
   end;

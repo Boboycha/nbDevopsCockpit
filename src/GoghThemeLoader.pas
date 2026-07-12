@@ -55,6 +55,7 @@ type
     class function StripComment(const S: string): string; static;
     class function NormalizeHex(const AHex: string): string; static;
     class function HexToAlphaColor(const AHex: string): UInt32; static;
+    class function CssRgbaToAlphaColor(const AHex: string): UInt32; static;
   public
     // Загружает .yml и применяет цвета к TTerminalTheme.
     // Возвращает True при успехе; AErrorMsg содержит причину отказа.
@@ -145,6 +146,28 @@ begin
   end;
 end;
 
+class function TGoghThemeLoader.CssRgbaToAlphaColor(
+  const AHex: string): UInt32;
+var
+  S: string;
+begin
+  S := StripQuotes(AHex);
+  if S.StartsWith('#') then
+    Delete(S, 1, 1);
+  S := UpperCase(Trim(S));
+  if Length(S) = 8 then
+    S := Copy(S, 7, 2) + Copy(S, 1, 6)
+  else if Length(S) = 6 then
+    S := 'FF' + S
+  else
+    S := '80000000';
+  Result := $80000000;
+  try
+    Result := StrToUInt64('$' + S);
+  except
+  end;
+end;
+
 class function TGoghThemeLoader.LoadIntoTheme(const AFileName: string;
   ATheme: TTerminalTheme; out AErrorMsg: string): Boolean;
 var
@@ -153,7 +176,7 @@ var
   ColonPos, ColorIdx, FilledColors, i: Integer;
   HasBG, HasFG: Boolean;
   ColorValues: array[0..15] of string;
-  BGValue, FGValue: string;
+  BGValue, FGValue, CursorValue, SelectionValue, TerminalUIValue: string;
 begin
   Result := False;
   AErrorMsg := '';
@@ -210,6 +233,12 @@ begin
         FGValue := Value;
         HasFG := True;
       end
+      else if Key = 'cursor' then
+        CursorValue := Value
+      else if Key = 'selection' then
+        SelectionValue := Value
+      else if Key = 'terminal_ui' then
+        TerminalUIValue := Value
       else if Key.StartsWith('color_') then
       begin
         IdxStr := Copy(Key, 7, MaxInt);
@@ -239,6 +268,19 @@ begin
     ATheme.DefaultFG := HexToAlphaColor(FGValue);
     for i := 0 to 15 do
       ATheme.AnsiColors[i] := HexToAlphaColor(ColorValues[i]);
+    if CursorValue <> '' then
+      ATheme.CursorColor := HexToAlphaColor(CursorValue)
+    else
+      ATheme.CursorColor := ATheme.DefaultFG;
+    if SelectionValue <> '' then
+      ATheme.SelectionColor := CssRgbaToAlphaColor(SelectionValue)
+    else
+      ATheme.SelectionColor := $80000000 or
+        (UInt32(ATheme.DefaultFG) and $00FFFFFF);
+    if TerminalUIValue <> '' then
+      ATheme.TerminalUIColor := HexToAlphaColor(TerminalUIValue)
+    else
+      ATheme.TerminalUIColor := ATheme.AnsiColors[8];
 
     Result := True;
   finally

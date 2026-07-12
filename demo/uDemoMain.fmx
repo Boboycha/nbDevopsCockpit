@@ -16,7 +16,10 @@ object DemoForm: TDemoForm
     Size.Height = 416.000000000000000000
     Size.PlatformDefault = False
     FontSize = 13.000000000000000000
+    FontWidthScale = 1.040000000000000000
+    FontHeightScale = 1.040000000000000000
     FontFamily = 'Source Code Pro'
+    SemanticHighlighting = True
     SSHClient = SSHClient1
   end
   object odTheme: TOpenDialog

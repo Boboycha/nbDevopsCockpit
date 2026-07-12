@@ -34,6 +34,7 @@ type
   private
     FState: (psNormal, psEscape, psCSI, psOSC, psCharsetG0, psCharsetG1);
     FParamBuffer: string;
+    FIntermediateBuffer: string;
     FCurrentAttributes: TCharAttributes;
     FTheme: TTerminalTheme;
 
@@ -42,6 +43,11 @@ type
     FUseG1: Boolean;
 
     procedure ParseSGR(const Params: TArray<Integer>);
+    procedure ParseCSIParams(FinalChar: WideChar;
+      out Params: TArray<Integer>; out IsPrivateMode: Boolean);
+    procedure InitCommand(out Cmd: TAnsiCommand);
+    procedure SetIndexedColor(IsForeground: Boolean; Index: Integer);
+    procedure SetRGBColor(IsForeground: Boolean; R, G, B: Integer);
     function GetColor256(Index: Integer): TAlphaColor;
     function GetColorRGB(R, G, B: Integer): TAlphaColor;
     function MapChar(Ch: WideChar): string;
@@ -61,6 +67,14 @@ type
 
 implementation
 
+const
+  CLineDrawingMap: array[0..31] of WideChar = (
+    #$00A0, #$25C6, #$2592, #$2409, #$240C, #$240D, #$240A, #$00B0,
+    #$00B1, #$2424, #$240B, #$2518, #$2510, #$250C, #$2514, #$253C,
+    #$23BA, #$23BB, #$2500, #$23BC, #$23BD, #$251C, #$2524, #$2534,
+    #$252C, #$2502, #$2264, #$2265, #$03C0, #$2260, #$00A3, #$00B7);
+  CXtermColorLevels: array[0..5] of Byte = (0, 95, 135, 175, 215, 255);
+
 { TAnsiParser }
 
 constructor TAnsiParser.Create(ATheme: TTerminalTheme);
@@ -68,6 +82,7 @@ begin
   inherited Create;
   FState := psNormal;
   FParamBuffer := '';
+  FIntermediateBuffer := '';
   FTheme := ATheme;
   FCurrentAttributes := TCharAttributes.Default(FTheme);
   FG0 := csASCII;
@@ -92,74 +107,10 @@ begin
   if CurrentSet = csASCII then
     Exit(string(Ch));
 
-  case Ord(Ch) of
-    $5F:
-      Result := #$00A0;
-    $60:
-      Result := #$25C6;
-    $61:
-      Result := #$2592;
-    $62:
-      Result := #$2409;
-    $63:
-      Result := #$240C;
-    $64:
-      Result := #$240D;
-    $65:
-      Result := #$240A;
-    $66:
-      Result := #$00B0;
-    $67:
-      Result := #$00B1;
-    $68:
-      Result := #$2424;
-    $69:
-      Result := #$240B;
-    $6A:
-      Result := #$2518;
-    $6B:
-      Result := #$2510;
-    $6C:
-      Result := #$250C;
-    $6D:
-      Result := #$2514;
-    $6E:
-      Result := #$253C;
-    $6F:
-      Result := #$23BA;
-    $70:
-      Result := #$23BB;
-    $71:
-      Result := #$2500;
-    $72:
-      Result := #$23BC;
-    $73:
-      Result := #$23BD;
-    $74:
-      Result := #$251C;
-    $75:
-      Result := #$2524;
-    $76:
-      Result := #$2534;
-    $77:
-      Result := #$252C;
-    $78:
-      Result := #$2502;
-    $79:
-      Result := #$2264;
-    $7A:
-      Result := #$2265;
-    $7B:
-      Result := #$03C0;
-    $7C:
-      Result := #$2260;
-    $7D:
-      Result := #$00A3;
-    $7E:
-      Result := #$00B7;
+  if InRange(Ord(Ch), $5F, $7E) then
+    Result := CLineDrawingMap[Ord(Ch) - $5F]
   else
     Result := string(Ch);
-  end;
 end;
 
 function TAnsiParser.GetColor256(Index: Integer): TAlphaColor;
@@ -171,9 +122,9 @@ begin
   else if (Index >= 16) and (Index <= 231) then
   begin
     Index := Index - 16;
-    R := ((Index div 36) mod 6) * 51;
-    G := ((Index div 6) mod 6) * 51;
-    B := (Index mod 6) * 51;
+    R := CXtermColorLevels[(Index div 36) mod 6];
+    G := CXtermColorLevels[(Index div 6) mod 6];
+    B := CXtermColorLevels[Index mod 6];
     Result := MakeColor(R, G, B);
   end
   else if (Index >= 232) and (Index <= 255) then
@@ -189,6 +140,110 @@ function TAnsiParser.GetColorRGB(R, G, B: Integer): TAlphaColor;
 begin
   Result := MakeColor(EnsureRange(R, 0, 255), EnsureRange(G, 0, 255),
     EnsureRange(B, 0, 255));
+end;
+
+procedure TAnsiParser.InitCommand(out Cmd: TAnsiCommand);
+begin
+  Cmd := Default(TAnsiCommand);
+  Cmd.Attributes := FCurrentAttributes;
+end;
+
+procedure TAnsiParser.SetIndexedColor(IsForeground: Boolean; Index: Integer);
+var
+  Source: TTerminalColorSource;
+begin
+  if InRange(Index, 0, 15) then
+    Source := tcsAnsi
+  else
+    Source := tcsIndexed;
+
+  if IsForeground then
+  begin
+    FCurrentAttributes.ForegroundColor := GetColor256(Index);
+    FCurrentAttributes.ForegroundSource := Source;
+    FCurrentAttributes.ForegroundIndex := Index;
+  end
+  else
+  begin
+    FCurrentAttributes.BackgroundColor := GetColor256(Index);
+    FCurrentAttributes.BackgroundSource := Source;
+    FCurrentAttributes.BackgroundIndex := Index;
+  end;
+end;
+
+procedure TAnsiParser.SetRGBColor(IsForeground: Boolean; R, G, B: Integer);
+begin
+  if IsForeground then
+  begin
+    FCurrentAttributes.ForegroundColor := GetColorRGB(R, G, B);
+    FCurrentAttributes.ForegroundSource := tcsRGB;
+  end
+  else
+  begin
+    FCurrentAttributes.BackgroundColor := GetColorRGB(R, G, B);
+    FCurrentAttributes.BackgroundSource := tcsRGB;
+  end;
+end;
+
+procedure TAnsiParser.ParseCSIParams(FinalChar: WideChar;
+  out Params: TArray<Integer>; out IsPrivateMode: Boolean);
+var
+  I, ParamIndex, Value, DefaultValue, ParamCount: Integer;
+  HasDigits, ValueIsValid: Boolean;
+begin
+  IsPrivateMode := (FParamBuffer <> '') and (FParamBuffer[1] = '?');
+  I := Ord(IsPrivateMode) + 1;
+
+  if I > Length(FParamBuffer) then
+  begin
+    SetLength(Params, 0);
+    Exit;
+  end;
+
+  ParamCount := 1;
+  for ParamIndex := I to Length(FParamBuffer) do
+    if FParamBuffer[ParamIndex] = ';' then
+      Inc(ParamCount);
+  SetLength(Params, ParamCount);
+
+  DefaultValue := 1;
+  if FinalChar = 'm' then
+    DefaultValue := 0;
+  ParamIndex := 0;
+  Value := 0;
+  HasDigits := False;
+  ValueIsValid := True;
+  while I <= Length(FParamBuffer) do
+  begin
+    if FParamBuffer[I] = ';' then
+    begin
+      if HasDigits and ValueIsValid then
+        Params[ParamIndex] := Value
+      else if HasDigits then
+        Params[ParamIndex] := 1
+      else
+        Params[ParamIndex] := DefaultValue;
+      Inc(ParamIndex);
+      Value := 0;
+      HasDigits := False;
+      ValueIsValid := True;
+    end
+    else if CharInSet(FParamBuffer[I], ['0'..'9']) then
+    begin
+      HasDigits := True;
+      if Value <= (MaxInt - (Ord(FParamBuffer[I]) - Ord('0'))) div 10 then
+        Value := Value * 10 + Ord(FParamBuffer[I]) - Ord('0')
+      else
+        ValueIsValid := False;
+    end;
+    Inc(I);
+  end;
+  if HasDigits and ValueIsValid then
+    Params[ParamIndex] := Value
+  else if HasDigits then
+    Params[ParamIndex] := 1
+  else
+    Params[ParamIndex] := DefaultValue;
 end;
 
 procedure TAnsiParser.ParseSGR(const Params: TArray<Integer>);
@@ -245,18 +300,41 @@ begin
       29:
         FCurrentAttributes.Strikethrough := False;
       30 .. 37:
-        FCurrentAttributes.ForegroundColor := FTheme.AnsiColors[Param - 30];
+        begin
+          FCurrentAttributes.ForegroundColor := FTheme.AnsiColors[Param - 30];
+          FCurrentAttributes.ForegroundSource := tcsAnsi;
+          FCurrentAttributes.ForegroundIndex := Param - 30;
+        end;
       39:
-        FCurrentAttributes.ForegroundColor := FTheme.DefaultFG;
+        begin
+          FCurrentAttributes.ForegroundColor := FTheme.DefaultFG;
+          FCurrentAttributes.ForegroundSource := tcsDefault;
+        end;
       40 .. 47:
-        FCurrentAttributes.BackgroundColor := FTheme.AnsiColors[Param - 40];
+        begin
+          FCurrentAttributes.BackgroundColor := FTheme.AnsiColors[Param - 40];
+          FCurrentAttributes.BackgroundSource := tcsAnsi;
+          FCurrentAttributes.BackgroundIndex := Param - 40;
+        end;
       49:
-        FCurrentAttributes.BackgroundColor := FTheme.DefaultBG;
+        begin
+          FCurrentAttributes.BackgroundColor := FTheme.DefaultBG;
+          FCurrentAttributes.BackgroundSource := tcsDefault;
+        end;
       90 .. 97:
-        FCurrentAttributes.ForegroundColor := FTheme.AnsiColors[Param - 90 + 8];
+        begin
+          FCurrentAttributes.ForegroundIndex := Param - 90 + 8;
+          FCurrentAttributes.ForegroundColor :=
+            FTheme.AnsiColors[FCurrentAttributes.ForegroundIndex];
+          FCurrentAttributes.ForegroundSource := tcsAnsi;
+        end;
       100 .. 107:
-        FCurrentAttributes.BackgroundColor := FTheme.AnsiColors
-          [Param - 100 + 8];
+        begin
+          FCurrentAttributes.BackgroundIndex := Param - 100 + 8;
+          FCurrentAttributes.BackgroundColor :=
+            FTheme.AnsiColors[FCurrentAttributes.BackgroundIndex];
+          FCurrentAttributes.BackgroundSource := tcsAnsi;
+        end;
       38, 48:
         if I + 1 < Length(Params) then
         begin
@@ -266,20 +344,13 @@ begin
               if I + 1 < Length(Params) then
               begin
                 Inc(I);
-                if Param = 38 then
-                  FCurrentAttributes.ForegroundColor := GetColor256(Params[I])
-                else
-                  FCurrentAttributes.BackgroundColor := GetColor256(Params[I]);
+                SetIndexedColor(Param = 38, Params[I]);
               end;
             2:
               if I + 3 < Length(Params) then
               begin
-                if Param = 38 then
-                  FCurrentAttributes.ForegroundColor :=
-                    GetColorRGB(Params[I + 1], Params[I + 2], Params[I + 3])
-                else
-                  FCurrentAttributes.BackgroundColor :=
-                    GetColorRGB(Params[I + 1], Params[I + 2], Params[I + 3]);
+                SetRGBColor(Param = 38, Params[I + 1], Params[I + 2],
+                  Params[I + 3]);
                 Inc(I, 3);
               end;
           end;
@@ -294,6 +365,7 @@ begin
   FState := psNormal;
   FCurrentAttributes.Reset(FTheme);
   FParamBuffer := '';
+  FIntermediateBuffer := '';
 end;
 
 // ЖАДНЫЙ ПАРСЕР ДЛЯ ZWJ (Чтобы семья была одним символом)
@@ -354,11 +426,8 @@ var
   Ch: WideChar;
   Cmd: TAnsiCommand;
   CmdList: TList<TAnsiCommand>;
-  Parts: TArray<string>;
   Params: TArray<Integer>;
-  J: Integer;
   IsPrivateMode: Boolean;
-  ParamStr: string;
   FullChar: string;
 begin
   Result := True;
@@ -384,6 +453,7 @@ begin
             begin
               FState := psEscape;
               FParamBuffer := '';
+              FIntermediateBuffer := '';
             end
             else if (Length(FullChar) = 1) and (Ch = #14) then
               FUseG1 := True
@@ -403,29 +473,25 @@ begin
           end;
         psEscape:
           begin
-            if Ch = '[' then
-              FState := psCSI
-            else if Ch = ']' then
-              FState := psOSC
-            else if Ch = '(' then
-              FState := psCharsetG0
-            else if Ch = ')' then
-              FState := psCharsetG1
-            else if CharInSet(Ch, ['*', '+', '-', '.', '/']) then
-              FState := psNormal
-            else if CharInSet(Ch, ['=', '>', '7', '8', 'E', 'D', 'H', 'c']) then
-              FState := psNormal
-            else if Ch = 'M' then
-            begin
-              Cmd.Command := apcReverseIndex;
-              Cmd.Char := '';
-              Cmd.Attributes := FCurrentAttributes;
-              SetLength(Cmd.Params, 0);
-              CmdList.Add(Cmd);
-              FState := psNormal;
-            end
+            case Ch of
+              '[': FState := psCSI;
+              ']': FState := psOSC;
+              '(': FState := psCharsetG0;
+              ')': FState := psCharsetG1;
+              '7', '8', 'M':
+                begin
+                  InitCommand(Cmd);
+                  case Ch of
+                    '7': Cmd.Command := apcSaveCursorPosition;
+                    '8': Cmd.Command := apcRestoreCursorPosition;
+                    'M': Cmd.Command := apcReverseIndex;
+                  end;
+                  CmdList.Add(Cmd);
+                  FState := psNormal;
+                end;
             else
               FState := psNormal;
+            end;
           end;
         psCharsetG0:
           begin
@@ -452,40 +518,12 @@ begin
             if CharInSet(Ch, ['0' .. '9', ';', '?']) then
               FParamBuffer := FParamBuffer + Ch
             else if CharInSet(Ch, [#$20 .. #$2F]) then
-            begin
-
-            end
+              FIntermediateBuffer := FIntermediateBuffer + Ch
             else
             begin
-              Cmd.Command := apcNone;
-              Cmd.Char := '';
-              Cmd.Attributes := FCurrentAttributes;
-              IsPrivateMode := False;
-              if (FParamBuffer <> '') and (FParamBuffer[1] = '?') then
-              begin
-                IsPrivateMode := True;
-                FParamBuffer := Copy(FParamBuffer, 2, Length(FParamBuffer) - 1);
-              end;
-              if FParamBuffer = '' then
-                SetLength(Params, 0)
-              else
-              begin
-                Parts := FParamBuffer.Split([';']);
-                SetLength(Params, Length(Parts));
-                for J := 0 to High(Parts) do
-                begin
-                  ParamStr := Parts[J];
-                  if ParamStr = '' then
-                    Params[J] := 1
-                  else
-                  begin
-                    if ParamStr.StartsWith('?') then
-                      ParamStr := Copy(ParamStr, 2, Length(ParamStr) - 1);
-                    Params[J] := StrToIntDef(ParamStr, 1);
-                  end;
-                end;
-              end;
-              if (Ch = 'm') and (FParamBuffer = '') and not IsPrivateMode then
+              InitCommand(Cmd);
+              ParseCSIParams(Ch, Params, IsPrivateMode);
+              if (Ch = 'm') and (Length(Params) = 0) and not IsPrivateMode then
               begin
                 SetLength(Params, 1);
                 Params[0] := 0;
@@ -562,9 +600,11 @@ begin
                 'r':
                   Cmd.Command := apcSetScrollingRegion;
                 'p':
-                  Cmd.Command := apcSoftTerminalReset;
+                  if FIntermediateBuffer = '!' then
+                    Cmd.Command := apcSoftTerminalReset;
                 'q':
-                  Cmd.Command := apcSetCursorStyle;
+                  if FIntermediateBuffer = ' ' then
+                    Cmd.Command := apcSetCursorStyle;
                 's':
                   Cmd.Command := apcSaveCursorPosition;
                 'u':
@@ -586,6 +626,7 @@ begin
                 CmdList.Add(Cmd);
               FState := psNormal;
               FParamBuffer := '';
+              FIntermediateBuffer := '';
             end;
           end;
         psOSC:

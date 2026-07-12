@@ -35,6 +35,8 @@ type
 
     FRenderTimer: TTimer;
     FNeedRedraw: Boolean;
+    FPendingHostCols: Integer;
+    FPendingHostRows: Integer;
 
     FSyntaxRules: TList<TSyntaxRule>;
     FEnableSyntaxHighlighting: Boolean;
@@ -42,6 +44,9 @@ type
     // Для выделения
     FIsSelecting: Boolean;
     FSelectionStartAbs: TPoint;
+    FSelectionAutoScrollTimer: TTimer;
+    FSelectionMousePos: TPointF;
+    FSelectionAutoScrollDirection: Integer;
     FClearSelectionOnNextAction: Boolean;
     FSelectionProtectedUntilTick: Int64;
     FSuppressNextRightMouseUp: Boolean;
@@ -49,9 +54,14 @@ type
     FLastClickPoint: TPointF;
     FAutoCopySelection: Boolean;
     FPasteOnRightClick: Boolean;
+    FScrollBarPaint: ISkPaint;
+    FScrollBarDragging: Boolean;
+    FScrollBarDragOffset: Single;
+    FActiveMouseButton: Integer;
     FSSHBridge: TTerminalSSHBridge;
     FLastHostCols: Integer;
     FLastHostRows: Integer;
+    FUIScale: Single;
 
     function GetSSHClient: TnbSSHClient;
     procedure SetSSHClient(const Value: TnbSSHClient);
@@ -63,25 +73,45 @@ type
 
     procedure CursorTimerProc(Sender: TObject);
     procedure RenderTimerProc(Sender: TObject);
+    procedure SelectionAutoScrollTimerProc(Sender: TObject);
+    procedure UpdateSelectionAt(const X, Y: Single);
 
     function GetCols: Integer;
     function GetRows: Integer;
     function GetFontSize: Single;
     procedure SetFontSize(const Value: Single);
+    function GetFontWidthScale: Single;
+    procedure SetFontWidthScale(const Value: Single);
+    function GetFontHeightScale: Single;
+    procedure SetFontHeightScale(const Value: Single);
     function GetFontFamily: string;
     procedure SetFontFamily(const Value: string);
     function GetFontBold: Boolean;
     procedure SetFontBold(Value: Boolean);
     function GetFontItalic: Boolean;
     procedure SetFontItalic(Value: Boolean);
+    procedure SetUIScale(const Value: Single);
     function GetTheme: TTerminalTheme;
     procedure SetTheme(const Value: TTerminalTheme);
+    function GetSemanticHighlighting: Boolean;
+    procedure SetSemanticHighlighting(const Value: Boolean);
 
     procedure UpdateTerminalSize(NotifyHost: Boolean);
     procedure ApplyTerminalSize(NewCols, NewRows: Integer;
       NotifyHost: Boolean);
+    procedure ScheduleHostResize(NewCols, NewRows: Integer);
+    procedure FlushHostResize;
     procedure SendMouseReport(AButton, ACol, ARow: Integer; AShift: TShiftState;
       AState: TMouseButtonState);
+    function MouseReportingEnabled: Boolean;
+    function TryMouseCell(const X, Y: Single; OneBased: Boolean;
+      out Col, Row: Integer): Boolean;
+    class function MouseButtonCode(Button: TMouseButton;
+      out Code: Integer): Boolean; static;
+    function ScrollBarVisible: Boolean;
+    procedure GetScrollBarRects(out TrackRect, ThumbRect: TRectF);
+    procedure SetViewportFromThumb(const ThumbTop: Single);
+    procedure DrawScrollBar(const Canvas: ISkCanvas);
 
     function ApplyHighlighting(const Input: string): string;
     function TrySelectWordAt(Col, Row: Integer): Boolean;
@@ -98,6 +128,7 @@ protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure Draw(const Canvas: ISkCanvas; const Dest: TRectF; const Opacity: Single); override;
     procedure Resize; override;
+    procedure DoExit; override;
     procedure KeyDown(var Key: Word; var KeyChar: WideChar; Shift: TShiftState); override;
 
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Single); override;
@@ -134,13 +165,20 @@ protected
 
   published
     property FontSize: Single read GetFontSize write SetFontSize;
+    property FontWidthScale: Single read GetFontWidthScale
+      write SetFontWidthScale;
+    property FontHeightScale: Single read GetFontHeightScale
+      write SetFontHeightScale;
     property FontFamily: string read GetFontFamily write SetFontFamily;
     property FontBold: Boolean read GetFontBold write SetFontBold;
     property FontItalic: Boolean read GetFontItalic write SetFontItalic;
+    property UIScale: Single read FUIScale write SetUIScale;
     property Theme: TTerminalTheme read GetTheme write SetTheme;
     property SSHClient: TnbSSHClient read GetSSHClient write SetSSHClient;
     property EnableSyntaxHighlighting: Boolean read FEnableSyntaxHighlighting
       write FEnableSyntaxHighlighting default False;
+    property SemanticHighlighting: Boolean read GetSemanticHighlighting
+      write SetSemanticHighlighting default False;
     property AutoCopySelection: Boolean read FAutoCopySelection
       write FAutoCopySelection default True;
     property PasteOnRightClick: Boolean read FPasteOnRightClick
@@ -158,6 +196,8 @@ implementation
 
 const
   SelectionProtectionMs = 250;
+  ScrollBarWidth = 8.0;
+  ScrollBarMinThumbHeight = 24.0;
 
 { TnbTerminalControl }
 
@@ -183,6 +223,16 @@ begin
   FRenderTimer.Enabled := True;
   FNeedRedraw := True;
 
+  FPendingHostCols := 0;
+  FPendingHostRows := 0;
+
+  FSelectionAutoScrollTimer := TTimer.Create(Self);
+  FSelectionAutoScrollTimer.Interval := 50;
+  FSelectionAutoScrollTimer.OnTimer := SelectionAutoScrollTimerProc;
+  FSelectionAutoScrollTimer.Enabled := False;
+  FSelectionAutoScrollDirection := 0;
+  FSelectionMousePos := TPointF.Zero;
+
   FSyntaxRules := TList<TSyntaxRule>.Create;
   FEnableSyntaxHighlighting := False;
 
@@ -194,8 +244,14 @@ begin
   FLastClickPoint := TPointF.Zero;
   FAutoCopySelection := True;
   FPasteOnRightClick := True;
+  FScrollBarPaint := TSkPaint.Create;
+  FScrollBarPaint.AntiAlias := True;
+  FScrollBarDragging := False;
+  FScrollBarDragOffset := 0;
+  FActiveMouseButton := -1;
   FLastHostCols := 0;
   FLastHostRows := 0;
+  FUIScale := 1.0;
 
   FSSHBridge := TTerminalSSHBridge.Create(Self);
   FSSHBridge.OnConnected := HandleSSHConnected;
@@ -212,20 +268,35 @@ end;
 destructor TnbTerminalControl.Destroy;
 begin
   SetSSHClient(nil);  (* отписаться от старого клиента *)
-  FSyntaxRules.Free;
+  FSelectionAutoScrollTimer.Free;
   FRenderTimer.Free;
-  FTheme.Free;
   FCursorTimer.Free;
+  FSyntaxRules.Free;
   FSSHBridge.Free;
   FRenderer.Free;
   FParser.Free;
   FBuffer.Free;
+  FTheme.Free;
   inherited;
 end;
 
 function TnbTerminalControl.GetTheme: TTerminalTheme;
 begin
   Result := FTheme;
+end;
+
+function TnbTerminalControl.GetSemanticHighlighting: Boolean;
+begin
+  Result := Assigned(FRenderer) and FRenderer.SemanticHighlighting;
+end;
+
+procedure TnbTerminalControl.SetSemanticHighlighting(const Value: Boolean);
+begin
+  if Assigned(FRenderer) then
+  begin
+    FRenderer.SemanticHighlighting := Value;
+    FNeedRedraw := True;
+  end;
 end;
 
 procedure TnbTerminalControl.SetTheme(const Value: TTerminalTheme);
@@ -253,6 +324,34 @@ begin
     Result := FRenderer.FontSize
   else
     Result := 0;
+end;
+
+function TnbTerminalControl.GetFontWidthScale: Single;
+begin
+  Result := FRenderer.FontWidthScale;
+end;
+
+function TnbTerminalControl.GetFontHeightScale: Single;
+begin
+  Result := FRenderer.FontHeightScale;
+end;
+
+procedure TnbTerminalControl.SetFontHeightScale(const Value: Single);
+begin
+  if SameValue(FRenderer.FontHeightScale, Value, 0.001) then
+    Exit;
+  FRenderer.FontHeightScale := Value;
+  UpdateTerminalSize(True);
+  FNeedRedraw := True;
+end;
+
+procedure TnbTerminalControl.SetFontWidthScale(const Value: Single);
+begin
+  if SameValue(FRenderer.FontWidthScale, Value, 0.001) then
+    Exit;
+  FRenderer.FontWidthScale := Value;
+  UpdateTerminalSize(True);
+  FNeedRedraw := True;
 end;
 
 procedure TnbTerminalControl.SetFontSize(const Value: Single);
@@ -323,8 +422,30 @@ begin
   end;
 end;
 
+procedure TnbTerminalControl.SetUIScale(const Value: Single);
+var
+  NewValue: Single;
+begin
+  NewValue := Value;
+  if NewValue <= 0 then
+    NewValue := 1.0;
+
+  if SameValue(FUIScale, NewValue, 0.001) then
+    Exit;
+
+  FUIScale := NewValue;
+  if FRenderer <> nil then
+  begin
+    FRenderer.UIScale := FUIScale;
+    UpdateTerminalSize(True);
+    FNeedRedraw := True;
+  end;
+end;
+
 procedure TnbTerminalControl.CursorTimerProc(Sender: TObject);
 begin
+  if not FBuffer.Cursor.Blink then
+    Exit;
   FRenderer.ToggleCursorBlink;
   FNeedRedraw := True;
 end;
@@ -342,16 +463,24 @@ procedure TnbTerminalControl.Draw(const Canvas: ISkCanvas; const Dest: TRectF; c
 var
   ScreenSvc: IFMXScreenService;
   DPIScale: Single;
+  ControlScale: Single;
 begin
   inherited;
   DPIScale := 1.0;
   if TPlatformServices.Current.SupportsPlatformService(IFMXScreenService, ScreenSvc) then
     DPIScale := ScreenSvc.GetScreenScale;
 
-  FRenderer.Scale := DPIScale;
-  UpdateTerminalSize(True);
+  ControlScale := Max(Abs(AbsoluteScale.X), Abs(AbsoluteScale.Y));
+  if ControlScale <= 0 then
+    ControlScale := 1.0;
+
+  FRenderer.Scale := DPIScale * ControlScale;
+  FRenderer.ContentScale := ControlScale;
+  FRenderer.UIScale := FUIScale;
+  UpdateTerminalSize(False);
 
   FRenderer.Render(Canvas, Dest);
+  DrawScrollBar(Canvas);
 end;
 
 procedure TnbTerminalControl.Resize;
@@ -359,9 +488,25 @@ begin
   inherited;
 
   UpdateTerminalSize(True);
-
   Redraw;
   FNeedRedraw := False;
+end;
+
+procedure TnbTerminalControl.DoExit;
+begin
+  if FActiveMouseButton >= 0 then
+  begin
+    SendMouseReport(FActiveMouseButton, Max(1, FBuffer.LastMouseCol),
+      Max(1, FBuffer.LastMouseRow), [], mbsUp);
+    FActiveMouseButton := -1;
+  end;
+
+  FScrollBarDragging := False;
+  FIsSelecting := False;
+  FSelectionAutoScrollDirection := 0;
+  FSelectionAutoScrollTimer.Enabled := False;
+  ReleaseCapture;
+  inherited;
 end;
 
 procedure TnbTerminalControl.UpdateTerminalSize(NotifyHost: Boolean);
@@ -371,9 +516,14 @@ begin
   if not Assigned(FRenderer) or not Assigned(FBuffer) then
     Exit;
 
-  FRenderer.MeasureChar;
-
   if (FRenderer.CharWidth = 0) or (FRenderer.CharHeight = 0) then
+  begin
+    FRenderer.MeasureChar;
+    if (FRenderer.CharWidth = 0) or (FRenderer.CharHeight = 0) then
+      Exit;
+  end;
+
+  if (Width <= 0) or (Height <= 0) then
     Exit;
 
   NewCols := Trunc(Width / FRenderer.CharWidth);
@@ -398,13 +548,37 @@ begin
     FNeedRedraw := True;
   end;
 
-  if NotifyHost and Assigned(FSSHBridge) and
+  if (NotifyHost or SizeChanged) and Assigned(FSSHBridge) and
     ((NewCols <> FLastHostCols) or (NewRows <> FLastHostRows)) then
+    ScheduleHostResize(NewCols, NewRows);
+end;
+
+procedure TnbTerminalControl.ScheduleHostResize(NewCols, NewRows: Integer);
+begin
+  if (NewCols <= 0) or (NewRows <= 0) then
+    Exit;
+
+  FPendingHostCols := NewCols;
+  FPendingHostRows := NewRows;
+  FlushHostResize;
+end;
+
+procedure TnbTerminalControl.FlushHostResize;
+begin
+  if (FPendingHostCols <= 0) or (FPendingHostRows <= 0) then
+    Exit;
+
+  if Assigned(FSSHBridge) and
+    ((FPendingHostCols <> FLastHostCols) or
+     (FPendingHostRows <> FLastHostRows)) then
   begin
-    FSSHBridge.ResizePTY(NewCols, NewRows);
-    FLastHostCols := NewCols;
-    FLastHostRows := NewRows;
+    FSSHBridge.ResizePTY(FPendingHostCols, FPendingHostRows);
+    FLastHostCols := FPendingHostCols;
+    FLastHostRows := FPendingHostRows;
   end;
+
+  FPendingHostCols := 0;
+  FPendingHostRows := 0;
 end;
 
 procedure TnbTerminalControl.AddSyntaxRule(const Keyword, AnsiColor: string; IgnoreCase: Boolean);
@@ -424,24 +598,116 @@ end;
 
 function TnbTerminalControl.ApplyHighlighting(const Input: string): string;
 var
-  I: Integer;
+  Position, I, MatchRule, MatchLength, EscapeLength: Integer;
   Rule: TSyntaxRule;
-  Flags: TReplaceFlags;
-  Replacement: string;
-begin
-  Result := Input;
+  Builder: TStringBuilder;
 
-  for I := 0 to FSyntaxRules.Count - 1 do
+  function RuleMatches(const ARule: TSyntaxRule; const APosition: Integer): Boolean;
+  var
+    KeywordLength: Integer;
   begin
-    Rule := FSyntaxRules[I];
-    if Rule.Keyword = '' then Continue;
+    KeywordLength := Length(ARule.Keyword);
+    if (KeywordLength = 0) or
+      (APosition + KeywordLength - 1 > Length(Input)) then
+      Exit(False);
 
-    Flags := [rfReplaceAll];
-    if Rule.IgnoreCase then Include(Flags, rfIgnoreCase);
+    if ARule.IgnoreCase then
+      Result := StrLIComp(PChar(Input) + APosition - 1,
+        PChar(ARule.Keyword), KeywordLength) = 0
+    else
+      Result := StrLComp(PChar(Input) + APosition - 1,
+        PChar(ARule.Keyword), KeywordLength) = 0;
+  end;
 
-    Replacement := Rule.AnsiColor + Rule.Keyword + #27'[0m';
+  function AnsiSequenceLength(const APosition: Integer): Integer;
+  var
+    P: Integer;
+  begin
+    Result := 0;
+    if (Input[APosition] <> #27) then
+      Exit;
+    if APosition = Length(Input) then
+      Exit(1);
 
-    Result := StringReplace(Result, Rule.Keyword, Replacement, Flags);
+    case Input[APosition + 1] of
+      '[':
+        begin
+          P := APosition + 2;
+          while P <= Length(Input) do
+          begin
+            if Ord(Input[P]) in [$40..$7E] then
+              Exit(P - APosition + 1);
+            Inc(P);
+          end;
+          Result := Length(Input) - APosition + 1;
+        end;
+      ']':
+        begin
+          P := APosition + 2;
+          while P <= Length(Input) do
+          begin
+            if Input[P] = #7 then
+              Exit(P - APosition + 1);
+            if (Input[P] = #27) and (P < Length(Input)) and
+              (Input[P + 1] = '\') then
+              Exit(P - APosition + 2);
+            Inc(P);
+          end;
+          Result := Length(Input) - APosition + 1;
+        end;
+    else
+      Result := Min(2, Length(Input) - APosition + 1);
+    end;
+  end;
+
+begin
+  if (Input = '') or (FSyntaxRules.Count = 0) then
+    Exit(Input);
+
+  Builder := TStringBuilder.Create(Length(Input));
+  try
+    Position := 1;
+    while Position <= Length(Input) do
+    begin
+      EscapeLength := AnsiSequenceLength(Position);
+      if EscapeLength > 0 then
+      begin
+        Builder.Append(Input, Position - 1, EscapeLength);
+        Inc(Position, EscapeLength);
+        Continue;
+      end;
+
+      MatchRule := -1;
+      MatchLength := 0;
+      for I := 0 to FSyntaxRules.Count - 1 do
+      begin
+        Rule := FSyntaxRules[I];
+        if (Length(Rule.Keyword) > MatchLength) and
+          RuleMatches(Rule, Position) then
+        begin
+          MatchRule := I;
+          MatchLength := Length(Rule.Keyword);
+        end;
+      end;
+
+      if MatchRule >= 0 then
+      begin
+        Rule := FSyntaxRules[MatchRule];
+        Builder.Append(Rule.AnsiColor);
+        Builder.Append(Input, Position - 1, MatchLength);
+        Builder.Append(#27'[0m');
+        Inc(Position, MatchLength);
+      end
+      else
+      begin
+        Builder.Append(Input[Position]);
+        Inc(Position);
+      end;
+    end;
+
+    Result := Builder.ToString;
+  finally
+    Builder.Free;
   end;
 end;
 
@@ -451,6 +717,9 @@ var
   I: Integer;
   ProcessedText: string;
 begin
+  if Text = '' then
+    Exit;
+
   if FEnableSyntaxHighlighting and (FSyntaxRules.Count > 0) and (not FBuffer.IsAlternateBuffer) then
     ProcessedText := ApplyHighlighting(Text)
   else
@@ -458,6 +727,8 @@ begin
 
   if FParser.Parse(ProcessedText, Commands) then
   begin
+    if Length(Commands) = 0 then
+      Exit;
     for I := 0 to High(Commands) do
       FBuffer.ProcessCommand(Commands[I]);
 
@@ -535,15 +806,19 @@ begin
     Exit;
 
   Line := FBuffer.GetRenderLine(Row);
-  if (Col >= Length(Line)) or not IsWordChar(Line[Col].Char) then
+  if Col >= Length(Line.Cells) then
+    Exit;
+  if (Col > 0) and (Line.Cells[Col].Width = 0) then
+    Dec(Col);
+  if not IsWordChar(Line.Cells[Col].Char) then
     Exit;
 
   StartCol := Col;
-  while (StartCol > 0) and IsWordChar(Line[StartCol - 1].Char) do
+  while (StartCol > 0) and IsWordChar(Line.Cells[StartCol - 1].Char) do
     Dec(StartCol);
 
   EndCol := Col;
-  while (EndCol + 1 < Length(Line)) and IsWordChar(Line[EndCol + 1].Char) do
+  while (EndCol + 1 < Length(Line.Cells)) and IsWordChar(Line.Cells[EndCol + 1].Char) do
     Inc(EndCol);
 
   AbsY := FBuffer.ScreenYToAbsolute(Row);
@@ -586,8 +861,7 @@ begin
     begin
       // Нормализуем окончания строк: Enter в терминале = #13 (CR).
       // CRLF и LF → CR, иначе \r\n отправляет два события и дают пустые строки.
-      Text := Text.Replace(#13#10, #13);
-      Text := Text.Replace(#10, #13);
+      Text := TTerminalClipboard.NormalizeLineEndings(Text);
       if FBuffer.BracketedPaste then
         Text := TTerminalClipboard.WrapBracketedPaste(Text);
       FOnData(Text);
@@ -656,6 +930,108 @@ begin
     FOnData(S);
 end;
 
+function TnbTerminalControl.MouseReportingEnabled: Boolean;
+begin
+  Result := (FBuffer.MouseModes * [mtm1000_Click, mtm1002_Wheel,
+    mtm1003_Any]) <> [];
+end;
+
+function TnbTerminalControl.TryMouseCell(const X, Y: Single;
+  OneBased: Boolean; out Col, Row: Integer): Boolean;
+begin
+  Result := (FRenderer.CharWidth > 0) and (FRenderer.CharHeight > 0) and
+    (FBuffer.Width > 0) and (FBuffer.Height > 0);
+  if not Result then
+    Exit;
+
+  Col := EnsureRange(Trunc(X / FRenderer.CharWidth), 0, FBuffer.Width - 1);
+  Row := EnsureRange(Trunc(Y / FRenderer.CharHeight), 0, FBuffer.Height - 1);
+  if OneBased then
+  begin
+    Inc(Col);
+    Inc(Row);
+  end;
+end;
+
+class function TnbTerminalControl.MouseButtonCode(Button: TMouseButton;
+  out Code: Integer): Boolean;
+begin
+  Result := True;
+  case Button of
+    TMouseButton.mbLeft: Code := 0;
+    TMouseButton.mbMiddle: Code := 1;
+    TMouseButton.mbRight: Code := 2;
+  else
+    Result := False;
+  end;
+end;
+
+function TnbTerminalControl.ScrollBarVisible: Boolean;
+begin
+  Result := (FBuffer <> nil) and not FBuffer.IsAlternateBuffer and
+    (FBuffer.Scrollback.Count > 0) and (Height > 0);
+end;
+
+procedure TnbTerminalControl.GetScrollBarRects(out TrackRect,
+  ThumbRect: TRectF);
+var
+  HistoryCount, TotalLines: Integer;
+  ThumbHeight, Travel, Position: Single;
+begin
+  TrackRect := TRectF.Create(Max(0, Width - ScrollBarWidth), 0, Width, Height);
+  ThumbRect := TRectF.Empty;
+  if not ScrollBarVisible then
+    Exit;
+
+  HistoryCount := FBuffer.Scrollback.Count;
+  TotalLines := HistoryCount + FBuffer.Height;
+  ThumbHeight := Max(ScrollBarMinThumbHeight,
+    TrackRect.Height * FBuffer.Height / TotalLines);
+  ThumbHeight := Min(TrackRect.Height, ThumbHeight);
+  Travel := TrackRect.Height - ThumbHeight;
+  Position := (HistoryCount - FBuffer.ViewportOffset) / HistoryCount;
+  ThumbRect := TRectF.Create(TrackRect.Left, TrackRect.Top + Travel * Position,
+    TrackRect.Right, TrackRect.Top + Travel * Position + ThumbHeight);
+end;
+
+procedure TnbTerminalControl.SetViewportFromThumb(const ThumbTop: Single);
+var
+  TrackRect, ThumbRect: TRectF;
+  Travel, Position: Single;
+  NewOffset: Integer;
+begin
+  GetScrollBarRects(TrackRect, ThumbRect);
+  Travel := TrackRect.Height - ThumbRect.Height;
+  if Travel <= 0 then
+    NewOffset := 0
+  else
+  begin
+    Position := EnsureRange((ThumbTop - TrackRect.Top) / Travel, 0.0, 1.0);
+    NewOffset := Round(FBuffer.Scrollback.Count * (1.0 - Position));
+  end;
+
+  FBuffer.ScrollViewport(NewOffset - FBuffer.ViewportOffset);
+  FNeedRedraw := True;
+end;
+
+procedure TnbTerminalControl.DrawScrollBar(const Canvas: ISkCanvas);
+var
+  TrackRect, ThumbRect: TRectF;
+begin
+  if not ScrollBarVisible then
+    Exit;
+
+  GetScrollBarRects(TrackRect, ThumbRect);
+  FScrollBarPaint.Style := TSkPaintStyle.Fill;
+  FScrollBarPaint.Color := ($28 shl 24) or
+    (FTheme.TerminalUIColor and $00FFFFFF);
+  Canvas.DrawRect(TrackRect, FScrollBarPaint);
+  FScrollBarPaint.Color := TAlphaColor($90000000) or
+    (FTheme.DefaultFG and TAlphaColor($00FFFFFF));
+  Canvas.DrawRoundRect(ThumbRect, ScrollBarWidth / 2, ScrollBarWidth / 2,
+    FScrollBarPaint);
+end;
+
 procedure TnbTerminalControl.MouseDown(Button: TMouseButton; Shift: TShiftState;
   X, Y: Single);
 var
@@ -667,16 +1043,28 @@ var
 begin
   inherited;
   SetFocus;
-  if (FRenderer.CharWidth = 0) or (FRenderer.CharHeight = 0) then Exit;
-
-  if (FBuffer.ViewportOffset <> 0) and not (ssShift in Shift) then
+  Capture;
+  if (Button = TMouseButton.mbLeft) and ScrollBarVisible then
   begin
-    ResetViewportToBottom;
-    Exit;
+    var TrackRect, ThumbRect: TRectF;
+    GetScrollBarRects(TrackRect, ThumbRect);
+    if TrackRect.Contains(TPointF.Create(X, Y)) then
+    begin
+      FScrollBarDragging := True;
+      Cursor := crSizeNS;
+      if ThumbRect.Contains(TPointF.Create(X, Y)) then
+        FScrollBarDragOffset := Y - ThumbRect.Top
+      else
+      begin
+        FScrollBarDragOffset := ThumbRect.Height / 2;
+        SetViewportFromThumb(Y - FScrollBarDragOffset);
+      end;
+      Exit;
+    end;
   end;
 
-  Col := Trunc(X / FRenderer.CharWidth);
-  Row := Trunc(Y / FRenderer.CharHeight);
+  if not TryMouseCell(X, Y, False, Col, Row) then
+    Exit;
 
   ClickTick := TStopwatch.GetTimeStamp;
   IsDoubleClick := (Button = TMouseButton.mbLeft) and
@@ -694,10 +1082,11 @@ begin
   var RepCol := Col + 1;
   var RepRow := Row + 1;
 
-  IsMouseReporting := FBuffer.MouseModes <> [];
+  IsMouseReporting := MouseReportingEnabled;
   OverrideSelection := (ssShift in Shift);
 
-  if (Button = TMouseButton.mbRight) and FPasteOnRightClick then
+  if (Button = TMouseButton.mbRight) and FPasteOnRightClick and
+    ((not IsMouseReporting) or OverrideSelection) then
   begin
     FSuppressNextRightMouseUp := True;
     PasteFromClipboard;
@@ -720,17 +1109,13 @@ begin
     Exit;
   end;
 
-  case Button of
-    TMouseButton.mbLeft: Cb := 0;
-    TMouseButton.mbMiddle: Cb := 1;
-    TMouseButton.mbRight: Cb := 2;
-  else
+  if not MouseButtonCode(Button, Cb) then
     Exit;
-  end;
 
   SendMouseReport(Cb, RepCol, RepRow, Shift, mbsDown);
   FBuffer.LastMouseCol := RepCol;
   FBuffer.LastMouseRow := RepRow;
+  FActiveMouseButton := Cb;
 end;
 
 procedure TnbTerminalControl.MouseUp(Button: TMouseButton; Shift: TShiftState;
@@ -740,6 +1125,15 @@ var
   IsMouseReporting: Boolean;
   OverrideSelection: Boolean;
 begin
+  ReleaseCapture;
+
+  if FScrollBarDragging then
+  begin
+    FScrollBarDragging := False;
+    Cursor := crHandPoint;
+    Exit;
+  end;
+
   if (Button = TMouseButton.mbRight) and FSuppressNextRightMouseUp then
   begin
     FSuppressNextRightMouseUp := False;
@@ -750,6 +1144,8 @@ begin
   if FIsSelecting then
   begin
     FIsSelecting := False;
+    FSelectionAutoScrollDirection := 0;
+    FSelectionAutoScrollTimer.Enabled := False;
     if FAutoCopySelection and FBuffer.HasSelection then
       CopyToClipboard;
     if FBuffer.HasSelection then
@@ -757,59 +1153,68 @@ begin
     Exit;
   end;
 
-  IsMouseReporting := FBuffer.MouseModes <> [];
+  IsMouseReporting := MouseReportingEnabled;
   OverrideSelection := (ssShift in Shift);
 
-  if OverrideSelection then Exit;
+  if OverrideSelection and (FActiveMouseButton < 0) then Exit;
 
-  if not IsMouseReporting then
+  if (not IsMouseReporting) and (FActiveMouseButton < 0) then
     Exit;
 
-  if not (mtm1006_SGR in FBuffer.MouseModes) and
-     not (mtm1003_Any in FBuffer.MouseModes) then
-       Exit;
-
-  if (FRenderer.CharWidth = 0) or (FRenderer.CharHeight = 0) then Exit;
-
-  Col := Trunc(X / FRenderer.CharWidth) + 1;
-  Row := Trunc(Y / FRenderer.CharHeight) + 1;
-
-  case Button of
-    TMouseButton.mbLeft: Cb := 0;
-    TMouseButton.mbMiddle: Cb := 1;
-    TMouseButton.mbRight: Cb := 2;
-  else
+  if not TryMouseCell(X, Y, True, Col, Row) then
     Exit;
-  end;
+
+  if FActiveMouseButton >= 0 then
+    Cb := FActiveMouseButton
+  else if not MouseButtonCode(Button, Cb) then
+    Exit;
 
   SendMouseReport(Cb, Col, Row, Shift, mbsUp);
   FBuffer.LastMouseCol := Col;
   FBuffer.LastMouseRow := Row;
+  FActiveMouseButton := -1;
 end;
 
 procedure TnbTerminalControl.MouseMove(Shift: TShiftState; X, Y: Single);
 var
-  Col, Row, Cb, AbsY: Integer;
+  Col, Row, Cb: Integer;
   OverrideSelection: Boolean;
 begin
-  if (FRenderer.CharWidth = 0) or (FRenderer.CharHeight = 0) then Exit;
+  if FScrollBarDragging then
+  begin
+    Cursor := crSizeNS;
+    SetViewportFromThumb(Y - FScrollBarDragOffset);
+    Exit;
+  end;
 
-  Col := Trunc(X / FRenderer.CharWidth);
-  Row := Trunc(Y / FRenderer.CharHeight);
+  if ScrollBarVisible then
+  begin
+    var TrackRect, ThumbRect: TRectF;
+    GetScrollBarRects(TrackRect, ThumbRect);
+    if TrackRect.Contains(TPointF.Create(X, Y)) then
+    begin
+      Cursor := crHandPoint;
+      Exit;
+    end;
+  end;
+
+  if not TryMouseCell(X, Y, False, Col, Row) then
+    Exit;
 
   // Обновление выделения
   if FIsSelecting then
   begin
-    Col := Max(0, Min(Col, FBuffer.Width - 1));
-    Row := Max(0, Min(Row, FBuffer.Height - 1));
-
-    AbsY := FBuffer.ScreenYToAbsolute(Row);
-
-    if (Col <> FSelectionStartAbs.X) or (AbsY <> FSelectionStartAbs.Y) then
-    begin
-      FBuffer.SetSelection(FSelectionStartAbs.X, FSelectionStartAbs.Y, Col, AbsY);
-      FNeedRedraw := True;
-    end;
+    FSelectionMousePos := TPointF.Create(X, Y);
+    { FMX may clamp captured mouse coordinates to the control bounds, so start
+      auto-scroll while the pointer is in the first/last visible cell row. }
+    if Y < FRenderer.CharHeight then
+      FSelectionAutoScrollDirection := 1
+    else if Y >= Height - FRenderer.CharHeight then
+      FSelectionAutoScrollDirection := -1
+    else
+      FSelectionAutoScrollDirection := 0;
+    FSelectionAutoScrollTimer.Enabled := FSelectionAutoScrollDirection <> 0;
+    UpdateSelectionAt(X, Y);
     Exit;
   end;
 
@@ -825,7 +1230,8 @@ begin
   var RepRow := Row + 1;
 
   if not ((mtm1003_Any in FBuffer.MouseModes) or
-          ((mtm1006_SGR in FBuffer.MouseModes) and (Shift * [ssLeft, ssRight, ssMiddle] <> []))) then
+    ((mtm1002_Wheel in FBuffer.MouseModes) and
+    (Shift * [ssLeft, ssRight, ssMiddle] <> []))) then
   begin
     Cursor := crIBeam;
     Exit;
@@ -851,33 +1257,70 @@ begin
   SendMouseReport(Cb, RepCol, RepRow, Shift, mbsMove);
 end;
 
+procedure TnbTerminalControl.UpdateSelectionAt(const X, Y: Single);
+var
+  Col, Row, AbsY: Integer;
+begin
+  if not FIsSelecting then
+    Exit;
+
+  if not TryMouseCell(X, Y, False, Col, Row) then
+    Exit;
+  AbsY := FBuffer.ScreenYToAbsolute(Row);
+
+  FBuffer.SetSelection(FSelectionStartAbs.X, FSelectionStartAbs.Y, Col, AbsY);
+  FNeedRedraw := True;
+end;
+
+procedure TnbTerminalControl.SelectionAutoScrollTimerProc(Sender: TObject);
+var
+  OldOffset: Integer;
+begin
+  if (not FIsSelecting) or (FSelectionAutoScrollDirection = 0) then
+  begin
+    FSelectionAutoScrollTimer.Enabled := False;
+    Exit;
+  end;
+
+  OldOffset := FBuffer.ViewportOffset;
+  FBuffer.ScrollViewport(FSelectionAutoScrollDirection);
+  if FBuffer.ViewportOffset = OldOffset then
+  begin
+    FSelectionAutoScrollTimer.Enabled := False;
+    Exit;
+  end;
+
+  UpdateSelectionAt(FSelectionMousePos.X, FSelectionMousePos.Y);
+end;
+
 procedure TnbTerminalControl.MouseWheel(Shift: TShiftState; WheelDelta: Integer;
   var Handled: Boolean);
 var
-  Col, Row, Cb: Integer;
+  Col, Row, Cb, ScrollLines: Integer;
   LocalPos: TPointF;
   MouseService: IFMXMouseService;
   MousePos: TPointF;
 begin
-  // Случай 1: Мышь НЕ отслеживается
-  if not (mtm1002_Wheel in FBuffer.MouseModes) and
-     not (mtm1006_SGR in FBuffer.MouseModes) then
+  if ssCtrl in Shift then
   begin
-    ResetViewportToBottom;
-    if FBuffer.HasSelection then
-    begin
-      FBuffer.ClearSelection;
-      FClearSelectionOnNextAction := False;
-      FNeedRedraw := True;
-    end;
+    inherited;
+    Exit;
+  end;
 
+  // Случай 1: Мышь НЕ отслеживается
+  if not MouseReportingEnabled then
+  begin
+    ScrollLines := Max(1, Abs(WheelDelta) div 120) * 3;
+    if WheelDelta > 0 then
+      FBuffer.ScrollViewport(ScrollLines)
+    else
+      FBuffer.ScrollViewport(-ScrollLines);
+    FNeedRedraw := True;
     Handled := True;
     Exit;
   end;
 
   // Случай 2: Мышь отслеживается
-  if (FRenderer.CharWidth = 0) or (FRenderer.CharHeight = 0) then Exit;
-
   if not TPlatformServices.Current.SupportsPlatformService(IFMXMouseService, MouseService) then
   begin
      Handled := False;
@@ -887,8 +1330,8 @@ begin
   MousePos := MouseService.GetMousePos;
   LocalPos := AbsoluteToLocal(MousePos);
 
-  Col := Trunc(LocalPos.X / FRenderer.CharWidth) + 1;
-  Row := Trunc(LocalPos.Y / FRenderer.CharHeight) + 1;
+  if not TryMouseCell(LocalPos.X, LocalPos.Y, True, Col, Row) then
+    Exit;
 
   if WheelDelta > 0 then
     Cb := 64
@@ -920,6 +1363,8 @@ begin
     OnResized := HandleOwnResize;
     FLastHostCols := 0;
     FLastHostRows := 0;
+    FPendingHostCols := 0;
+    FPendingHostRows := 0;
     UpdateTerminalSize(True);
   end
   else
@@ -941,7 +1386,7 @@ begin
   SetFocus;
   (* Передаём актуальный размер - на случай если форма успела
      отресайзиться пока шёл коннект *)
-  UpdateTerminalSize(True);
+  UpdateTerminalSize(False);
   FSSHBridge.ResizePTY(Cols, Rows);
   FLastHostCols := Cols;
   FLastHostRows := Rows;
@@ -970,7 +1415,7 @@ end;
 
 procedure TnbTerminalControl.HandleOwnResize(Sender: TObject);
 begin
-  FSSHBridge.ResizePTY(Cols, Rows);
+  ScheduleHostResize(Cols, Rows);
 end;
 
 procedure TnbTerminalControl.HandleBufferResponse(const S: string);
@@ -998,13 +1443,6 @@ begin
     Self.Theme := NewTheme;
     Result := True;
 
-    (* Триггерим SIGWINCH чтобы mc/htop/vim перерисовались с новой темой.
-       Если SSH не подключён - просто пропускаем. *)
-    if FSSHBridge.Connected then
-    begin
-      FSSHBridge.ResizePTY(Cols, Rows + 1);
-      FSSHBridge.ResizePTY(Cols, Rows);
-    end;
   finally
     NewTheme.Free;
   end;
@@ -1028,11 +1466,6 @@ begin
     (* TTerminalTheme в конструкторе уже выставляет дефолтные цвета *)
     Self.Theme := DefaultTheme;
 
-    if FSSHBridge.Connected then
-    begin
-      FSSHBridge.ResizePTY(Cols, Rows + 1);
-      FSSHBridge.ResizePTY(Cols, Rows);
-    end;
   finally
     DefaultTheme.Free;
   end;

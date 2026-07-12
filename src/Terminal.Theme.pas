@@ -11,6 +11,9 @@ type
     FAnsiColors: array[0..15] of TAlphaColor;
     FDefaultFG: TAlphaColor;
     FDefaultBG: TAlphaColor;
+    FCursorColor: TAlphaColor;
+    FSelectionColor: TAlphaColor;
+    FTerminalUIColor: TAlphaColor;
     FName: string; // Добавили имя темы
     function GetAnsiColor(Index: Integer): TAlphaColor;
     procedure SetAnsiColor(Index: Integer; const Value: TAlphaColor);
@@ -34,6 +37,9 @@ type
     property AnsiColors[Index: Integer]: TAlphaColor read GetAnsiColor write SetAnsiColor;
     property DefaultFG: TAlphaColor read FDefaultFG write FDefaultFG;
     property DefaultBG: TAlphaColor read FDefaultBG write FDefaultBG;
+    property CursorColor: TAlphaColor read FCursorColor write FCursorColor;
+    property SelectionColor: TAlphaColor read FSelectionColor write FSelectionColor;
+    property TerminalUIColor: TAlphaColor read FTerminalUIColor write FTerminalUIColor;
   end;
 
 implementation
@@ -61,6 +67,9 @@ begin
       Self.FAnsiColors[I] := SrcTheme.FAnsiColors[I];
     Self.FDefaultFG := SrcTheme.FDefaultFG;
     Self.FDefaultBG := SrcTheme.FDefaultBG;
+    Self.FCursorColor := SrcTheme.FCursorColor;
+    Self.FSelectionColor := SrcTheme.FSelectionColor;
+    Self.FTerminalUIColor := SrcTheme.FTerminalUIColor;
     Self.FName := SrcTheme.FName;
   end
   else
@@ -134,6 +143,9 @@ begin
 
     FDefaultFG := HexToColor(Ini.ReadString('Colors', 'DefaultFG', 'FFE5E5E5'));
     FDefaultBG := HexToColor(Ini.ReadString('Colors', 'DefaultBG', 'FF000000'));
+    FCursorColor := HexToColor(Ini.ReadString('Colors', 'Cursor', 'FFE5E5E5'));
+    FSelectionColor := HexToColor(Ini.ReadString('Colors', 'Selection', '803399FF'));
+    FTerminalUIColor := HexToColor(Ini.ReadString('Colors', 'TerminalUI', 'FF666666'));
 
     for I := 0 to 15 do
     begin
@@ -152,6 +164,9 @@ begin
   FName := 'Default (MC)';
   FDefaultFG := $FFE5E5E5;
   FDefaultBG := $FF000000;
+  FCursorColor := $FFE5E5E5;
+  FSelectionColor := $803399FF;
+  FTerminalUIColor := $FF666666;
   FAnsiColors[0] := $FF000000; FAnsiColors[1] := $FFCD3131;
   FAnsiColors[2] := $FF0DBC79; FAnsiColors[3] := $FFE5E510;
   FAnsiColors[4] := $FF2472C8; FAnsiColors[5] := $FFBC3FBC;

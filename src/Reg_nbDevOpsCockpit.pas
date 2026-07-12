@@ -3,8 +3,8 @@
 (*
   Design-time registration for nbDevOpsCockpit.
 
-  Runtime units live in nbDevOpsCockpit. This unit is compiled only into
-  dclnbDevOpsCockpit and may depend on DesignIDE/ToolsAPI units.
+  This repository currently uses one DESIGNONLY package, nbDevOpsCockpit,
+  which contains both the components and their IDE registration.
 *)
 
 interface
@@ -64,15 +64,19 @@ procedure RegisterTerminalDesignTime;
 begin
   RegisterPropertiesInCategory(TerminalCategory, TnbTerminalControl, [
     'FontSize',
+    'FontWidthScale',
+    'FontHeightScale',
     'FontFamily',
     'FontBold',
     'FontItalic',
+    'UIScale',
     'Theme',
     'SSHClient'
   ]);
 
   RegisterPropertiesInCategory(TerminalBehaviorCategory, TnbTerminalControl, [
     'EnableSyntaxHighlighting',
+    'SemanticHighlighting',
     'AutoCopySelection',
     'PasteOnRightClick'
   ]);

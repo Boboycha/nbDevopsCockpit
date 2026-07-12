@@ -249,6 +249,12 @@ procedure TSSHWorkerThread.EnqueueCommand(const Cmd: TSSHCommand);
 begin
   FCommandLock.Enter;
   try
+    // Resize is state, not a stream of events. Collapse only adjacent pending
+    // resize commands so keyboard writes retain their exact queue ordering.
+    if Cmd.Kind = sckResize then
+      while (FCommandQueue.Count > 0) and
+        (FCommandQueue[FCommandQueue.Count - 1].Kind = sckResize) do
+        FCommandQueue.Delete(FCommandQueue.Count - 1);
     FCommandQueue.Add(Cmd);
   finally
     FCommandLock.Leave;
@@ -321,6 +327,7 @@ procedure TSSHWorkerThread.ProcessIncoming(const Bytes: TBytes; ByteCount: Integ
 var
   Combined: TBytes;
   CutAt, TailLen: Integer;
+  Decoded: string;
 begin
   if ByteCount <= 0 then Exit;
 
@@ -348,9 +355,9 @@ begin
 
   if CutAt > 0 then
   begin
-    FCurrentReadData := TEncoding.UTF8.GetString(Combined, 0, CutAt);
-    if FCurrentReadData <> '' then
-      Synchronize(DoSyncRead);
+    Decoded := TEncoding.UTF8.GetString(Combined, 0, CutAt);
+    if Decoded <> '' then
+      FCurrentReadData := FCurrentReadData + Decoded;
   end;
 end;
 
@@ -682,6 +689,7 @@ begin
     while not Terminated do
     begin
       ReadAnything := False;
+      FCurrentReadData := '';
       repeat
         ReadLen := ssh2_channel_read_ex(FChannel, 0, PAnsiChar(@Buf[0]), Length(Buf));
         if ReadLen > 0 then
@@ -690,6 +698,9 @@ begin
           ReadAnything := True;
         end;
       until ReadLen <= 0;
+
+      if FCurrentReadData <> '' then
+        Synchronize(DoSyncRead);
 
       if (ReadLen < 0) and (ReadLen <> LIBSSH2_ERROR_EAGAIN) then
       begin
