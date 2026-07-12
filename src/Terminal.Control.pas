@@ -62,6 +62,7 @@ type
     FLastHostCols: Integer;
     FLastHostRows: Integer;
     FUIScale: Single;
+    FDeferHostResize: Boolean;
 
     function GetSSHClient: TnbSSHClient;
     procedure SetSSHClient(const Value: TnbSSHClient);
@@ -91,6 +92,7 @@ type
     function GetFontItalic: Boolean;
     procedure SetFontItalic(Value: Boolean);
     procedure SetUIScale(const Value: Single);
+    procedure SetDeferHostResize(const Value: Boolean);
     function GetTheme: TTerminalTheme;
     procedure SetTheme(const Value: TTerminalTheme);
     function GetSemanticHighlighting: Boolean;
@@ -162,6 +164,8 @@ protected
     property Renderer: TTerminalRenderer read FRenderer;
     property Cols: Integer read GetCols;
     property Rows: Integer read GetRows;
+    property DeferHostResize: Boolean read FDeferHostResize
+      write SetDeferHostResize;
 
   published
     property FontSize: Single read GetFontSize write SetFontSize;
@@ -223,6 +227,7 @@ begin
   FRenderTimer.Enabled := True;
   FNeedRedraw := True;
 
+
   FPendingHostCols := 0;
   FPendingHostRows := 0;
 
@@ -252,6 +257,7 @@ begin
   FLastHostCols := 0;
   FLastHostRows := 0;
   FUIScale := 1.0;
+  FDeferHostResize := False;
 
   FSSHBridge := TTerminalSSHBridge.Create(Self);
   FSSHBridge.OnConnected := HandleSSHConnected;
@@ -450,6 +456,18 @@ begin
   FNeedRedraw := True;
 end;
 
+procedure TnbTerminalControl.SetDeferHostResize(const Value: Boolean);
+begin
+  if FDeferHostResize = Value then
+    Exit;
+
+  FDeferHostResize := Value;
+  if (not FDeferHostResize) and Assigned(FSSHBridge) and
+    ((FBuffer.Width <> FLastHostCols) or
+     (FBuffer.Height <> FLastHostRows)) then
+    ScheduleHostResize(FBuffer.Width, FBuffer.Height);
+end;
+
 procedure TnbTerminalControl.RenderTimerProc(Sender: TObject);
 begin
   if FNeedRedraw then
@@ -548,7 +566,8 @@ begin
     FNeedRedraw := True;
   end;
 
-  if (NotifyHost or SizeChanged) and Assigned(FSSHBridge) and
+  if (not FDeferHostResize) and (NotifyHost or SizeChanged) and
+    Assigned(FSSHBridge) and
     ((NewCols <> FLastHostCols) or (NewRows <> FLastHostRows)) then
     ScheduleHostResize(NewCols, NewRows);
 end;
