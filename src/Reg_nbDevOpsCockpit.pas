@@ -22,7 +22,8 @@ uses
   nbFilePane.Controls,
   nbFilePane,
   nbSFTPClient,
-  nbSFTPTransfer;
+  nbSFTPTransfer,
+  nbCodeEditor;
 
 const
   PaletteName = 'nb DevOps';
@@ -110,7 +111,8 @@ begin
     TnbFilePane,
     TnbToolButton,
     TnbSFTPClient,
-    TnbSFTPTransfer
+    TnbSFTPTransfer,
+    TnbCodeEditor
   ]);
 
   RegisterComponents(PaletteName, [
@@ -118,7 +120,8 @@ begin
     TnbTerminalControl,
     TnbFilePane,
     TnbSFTPClient,
-    TnbSFTPTransfer
+    TnbSFTPTransfer,
+    TnbCodeEditor
   ]);
 
   RegisterSSHDesignTime;

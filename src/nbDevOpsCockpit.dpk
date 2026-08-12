@@ -32,9 +32,7 @@
 requires
   rtl,
   fmx,
-  DesignIDE,
-  Skia.Package.RTL,
-  Skia.Package.FMX;
+  DesignIDE;
 
 contains
   nbSSH.LibSSH2 in 'nbSSH.LibSSH2.pas',
@@ -55,6 +53,19 @@ contains
   Terminal.Clipboard in 'Terminal.Clipboard.pas',
   Terminal.SSHBridge in 'Terminal.SSHBridge.pas',
   Terminal.Control in 'Terminal.Control.pas',
+  nbTextDocument in 'nbTextDocument.pas',
+  nbCodeEditor in 'nbCodeEditor.pas',
+  FMX.StyledContextMenu in '..\third_party\FMXRichMemo\FMX.StyledContextMenu.pas',
+  Syntax.Code in '..\third_party\FMXRichMemo\Syntax.Code.pas',
+  Syntax.Code.Pascal in '..\third_party\FMXRichMemo\Syntax.Code.Pascal.pas',
+  Syntax.Code.JSON in '..\third_party\FMXRichMemo\Syntax.Code.JSON.pas',
+  Syntax.Code.SQL in '..\third_party\FMXRichMemo\Syntax.Code.SQL.pas',
+  Syntax.Code.Python in '..\third_party\FMXRichMemo\Syntax.Code.Python.pas',
+  Syntax.Code.HTML in '..\third_party\FMXRichMemo\Syntax.Code.HTML.pas',
+  Syntax.Code.CSS in '..\third_party\FMXRichMemo\Syntax.Code.CSS.pas',
+  Syntax.Code.MarkDown in '..\third_party\FMXRichMemo\Syntax.Code.MarkDown.pas',
+  Syntax.Code.Shell in '..\third_party\FMXRichMemo\Syntax.Code.Shell.pas',
+  FMX.RichEdit.Style in '..\third_party\FMXRichMemo\FMX.RichEdit.Style.pas',
   GoghThemeLoader in 'GoghThemeLoader.pas',
   Reg_nbDevOpsCockpit in 'Reg_nbDevOpsCockpit.pas';
 

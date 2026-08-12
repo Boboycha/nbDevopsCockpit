@@ -1,4 +1,4 @@
-﻿unit Terminal.Buffer;
+unit Terminal.Buffer;
 
 interface
 
@@ -45,6 +45,7 @@ type
     FSelEnd: TPoint;
     FHasSelection: Boolean;
     FBracketedPaste: Boolean;
+    FCarriageReturnPending: Boolean;
     FOnResponse: TTerminalResponseEvent;
 
     function GetLine(Index: Integer): TTerminalLine;
@@ -54,13 +55,23 @@ type
     procedure ScrollUp(Lines: Integer = 1);
     procedure ScrollDown(Lines: Integer = 1);
     procedure RemapBufferColors(Buffer: TList<TTerminalLine>;
-      OldTheme, NewTheme: TTerminalTheme);
+      NewTheme: TTerminalTheme);
     function CreateBlankLine: TTerminalLine;
     procedure SetDirty(LineIndex: Integer);
     procedure SetRangeDirty(FromIndex, ToIndex: Integer);
     procedure InternalScrollUp(Top, Bottom, Count: Integer);
     procedure InternalScrollDown(Top, Bottom, Count: Integer);
+    procedure AdvanceToNextLine(IsWrapped, ResetColumn: Boolean);
+    procedure BlankCell(var Cell: TTerminalChar;
+      const Attr: TCharAttributes);
+    procedure ClearCellRange(var Line: TTerminalLine; First, Last: Integer;
+      const Attr: TCharAttributes);
+    procedure NormalizeWideCells(var Line: TTerminalLine;
+      const Attr: TCharAttributes);
     procedure NormalizeSelection;
+    function GetLineByAbsoluteIndex(Index: Integer): TTerminalLine;
+    procedure SetSelectionRangeDirty(StartAbsY, EndAbsY: Integer);
+    procedure ReflowMainBuffer(NewWidth, NewHeight: Integer);
     
     // Очистка "хвоста" wide-символа если перезаписываем
     procedure ClearWideCharTail(Line: TTerminalLine; X: Integer);
@@ -135,7 +146,14 @@ begin
   FTheme := ATheme;
   FWidth := AWidth;
   FHeight := AHeight;
-  FMaxScrollback := 10000;
+  (* Лимит истории. Каждая строка ~30-40 байт на ячейку (TTerminalChar
+     record) плюс отдельная heap-аллокация под Char: string на каждый
+     непустой символ - т.е. строка из ~120 колонок занимает ориентировочно
+     8-10 КБ. 100 000 строк - это ~1 ГБ в худшем случае на одну вкладку
+     терминала; выбрано как верхняя разумная граница, покрывающая cat
+     больших логов без риска OOM при нескольких одновременно открытых
+     SSH-сессиях. *)
+  FMaxScrollback := 100000;
   FScrollTop := 0;
   FScrollBottom := FHeight - 1;
   FUseAlternateBuffer := False;
@@ -147,6 +165,7 @@ begin
   FLastMouseRow := 1;
   FHasSelection := False;
   FBracketedPaste := False;
+  FCarriageReturnPending := False;
 
   FLines := TList<TTerminalLine>.Create;
   FScrollback := TList<TTerminalLine>.Create;
@@ -161,6 +180,8 @@ begin
   FCursor.X := 0;
   FCursor.Y := 0;
   FCursor.Visible := True;
+  FCursor.Shape := tcsBlock;
+  FCursor.Blink := True;
   FSavedCursor := FCursor;
   FSavedCursorMain := FCursor;
   FSavedCursorAlt := FCursor;
@@ -180,26 +201,24 @@ end;
 function TTerminalBuffer.CreateBlankLine: TTerminalLine;
 var
   J: Integer;
+  BlankAttributes: TCharAttributes;
 begin
-  SetLength(Result, FWidth);
+  Result := Default(TTerminalLine);
+  SetLength(Result.Cells, FWidth);
+  BlankAttributes := TCharAttributes.Default(FTheme);
   for J := 0 to FWidth - 1 do
-  begin
-    Result[J].Char := ' ';
-    Result[J].Attributes := TCharAttributes.Default(FTheme);
-    Result[J].Width := 1;  // Обычная ширина
-  end;
+    BlankCell(Result.Cells[J], BlankAttributes);
+  Result.IsWrapped := False;
 end;
 
 procedure TTerminalBuffer.ClearWideCharTail(Line: TTerminalLine; X: Integer);
 begin
   // Если текущая ячейка — wide (Width=2), очищаем следующую ячейку (хвост)
-  if (X < Length(Line)) and (Line[X].Width = 2) then
+  if (X < Length(Line.Cells)) and (Line.Cells[X].Width = 2) then
   begin
-    if (X + 1 < Length(Line)) and (Line[X + 1].Width = 0) then
+    if (X + 1 < Length(Line.Cells)) and (Line.Cells[X + 1].Width = 0) then
     begin
-      Line[X + 1].Char := ' ';
-      Line[X + 1].Width := 1;
-      Line[X + 1].Attributes := TCharAttributes.Default(FTheme);
+      BlankCell(Line.Cells[X + 1], TCharAttributes.Default(FTheme));
     end;
   end;
 end;
@@ -207,13 +226,11 @@ end;
 procedure TTerminalBuffer.ClearWideCharHead(Line: TTerminalLine; X: Integer);
 begin
   // Если текущая ячейка — хвост wide-символа (Width=0), очищаем голову
-  if (X < Length(Line)) and (Line[X].Width = 0) then
+  if (X < Length(Line.Cells)) and (Line.Cells[X].Width = 0) then
   begin
-    if (X > 0) and (Line[X - 1].Width = 2) then
+    if (X > 0) and (Line.Cells[X - 1].Width = 2) then
     begin
-      Line[X - 1].Char := ' ';
-      Line[X - 1].Width := 1;
-      Line[X - 1].Attributes := TCharAttributes.Default(FTheme);
+      BlankCell(Line.Cells[X - 1], TCharAttributes.Default(FTheme));
     end;
   end;
 end;
@@ -234,7 +251,7 @@ begin
   if (Index >= 0) and (Index < CurrentLines.Count) then
     Result := CurrentLines[Index]
   else
-    Result := nil;
+    Result := Default(TTerminalLine);
 end;
 
 procedure TTerminalBuffer.SetLine(Index: Integer; const Value: TTerminalLine);
@@ -265,19 +282,53 @@ begin
 end;
 
 procedure TTerminalBuffer.SetRangeDirty(FromIndex, ToIndex: Integer);
+begin
+  FromIndex := Max(FromIndex, 0);
+  ToIndex := Min(ToIndex, High(FLinesDirty));
+  if FromIndex <= ToIndex then
+    FillChar(FLinesDirty[FromIndex],
+      (ToIndex - FromIndex + 1) * SizeOf(Boolean), Ord(True));
+end;
+
+procedure TTerminalBuffer.BlankCell(var Cell: TTerminalChar;
+  const Attr: TCharAttributes);
+begin
+  Cell.Char := ' ';
+  Cell.Attributes := Attr;
+  Cell.Width := 1;
+end;
+
+procedure TTerminalBuffer.ClearCellRange(var Line: TTerminalLine;
+  First, Last: Integer; const Attr: TCharAttributes);
 var
   I: Integer;
 begin
-  for I := FromIndex to ToIndex do
-    SetDirty(I);
+  First := Max(First, 0);
+  Last := Min(Last, High(Line.Cells));
+  for I := First to Last do
+    BlankCell(Line.Cells[I], Attr);
+end;
+
+procedure TTerminalBuffer.NormalizeWideCells(var Line: TTerminalLine;
+  const Attr: TCharAttributes);
+var
+  I: Integer;
+begin
+  for I := 0 to High(Line.Cells) do
+    case Line.Cells[I].Width of
+      0:
+        if (I = 0) or (Line.Cells[I - 1].Width <> 2) then
+          BlankCell(Line.Cells[I], Attr);
+      2:
+        if (I = High(Line.Cells)) or (Line.Cells[I + 1].Width <> 0) then
+          BlankCell(Line.Cells[I], Attr);
+    end;
 end;
 
 procedure TTerminalBuffer.SetAllDirty;
-var
-  I: Integer;
 begin
-  for I := 0 to High(FLinesDirty) do
-    FLinesDirty[I] := True;
+  if Length(FLinesDirty) > 0 then
+    FillChar(FLinesDirty[0], Length(FLinesDirty) * SizeOf(Boolean), Ord(True));
 end;
 
 function TTerminalBuffer.IsLineDirty(Index: Integer): Boolean;
@@ -297,38 +348,52 @@ end;
 procedure TTerminalBuffer.InternalScrollUp(Top, Bottom, Count: Integer);
 var
   CurrentLines: TList<TTerminalLine>;
-  I, Step: Integer;
+  I, TrimCount: Integer;
+  HistoryLine: TTerminalLine;
 begin
   CurrentLines := GetCurrentLines;
   EnsureLine(Bottom);
-  for Step := 1 to Count do
+  Count := EnsureRange(Count, 0, Bottom - Top + 1);
+  if Count = 0 then
+    Exit;
+
+  if (not FUseAlternateBuffer) and (Top = 0) and
+    (Bottom = FHeight - 1) then
   begin
-    if (not FUseAlternateBuffer) and (Top = 0) and (Bottom = FHeight - 1) then
+    for I := Top to Top + Count - 1 do
     begin
-      FScrollback.Add(Copy(CurrentLines[Top]));
-      if FScrollback.Count > FMaxScrollback then
-        FScrollback.Delete(0);
+      HistoryLine := CurrentLines[I];
+      HistoryLine.Cells := Copy(HistoryLine.Cells);
+      FScrollback.Add(HistoryLine);
     end;
-    for I := Top to Bottom - 1 do
-      CurrentLines[I] := CurrentLines[I + 1];
-    CurrentLines[Bottom] := CreateBlankLine;
+    TrimCount := Min(FScrollback.Count,
+      Max(0, FScrollback.Count - FMaxScrollback));
+    if TrimCount > 0 then
+      FScrollback.DeleteRange(0, TrimCount);
   end;
+
+  for I := Top to Bottom - Count do
+    CurrentLines[I] := CurrentLines[I + Count];
+  for I := Bottom - Count + 1 to Bottom do
+    CurrentLines[I] := CreateBlankLine;
   SetRangeDirty(Top, Bottom);
 end;
 
 procedure TTerminalBuffer.InternalScrollDown(Top, Bottom, Count: Integer);
 var
   CurrentLines: TList<TTerminalLine>;
-  I, Step: Integer;
+  I: Integer;
 begin
   CurrentLines := GetCurrentLines;
   EnsureLine(Bottom);
-  for Step := 1 to Count do
-  begin
-    for I := Bottom downto Top + 1 do
-      CurrentLines[I] := CurrentLines[I - 1];
-    CurrentLines[Top] := CreateBlankLine;
-  end;
+  Count := EnsureRange(Count, 0, Bottom - Top + 1);
+  if Count = 0 then
+    Exit;
+
+  for I := Bottom downto Top + Count do
+    CurrentLines[I] := CurrentLines[I - Count];
+  for I := Top to Top + Count - 1 do
+    CurrentLines[I] := CreateBlankLine;
   SetRangeDirty(Top, Bottom);
 end;
 
@@ -337,6 +402,9 @@ var
   IsFullScreenScroll: Boolean;
   K: Integer;
 begin
+  Lines := EnsureRange(Lines, 0, FScrollBottom - FScrollTop + 1);
+  if Lines = 0 then
+    Exit;
   IsFullScreenScroll := (FScrollTop = 0) and (FScrollBottom = FHeight - 1);
   InternalScrollUp(FScrollTop, FScrollBottom, Lines);
   if IsFullScreenScroll then
@@ -356,7 +424,29 @@ end;
 
 procedure TTerminalBuffer.ScrollDown(Lines: Integer);
 begin
+  Lines := EnsureRange(Lines, 0, FScrollBottom - FScrollTop + 1);
+  if Lines = 0 then
+    Exit;
   InternalScrollDown(FScrollTop, FScrollBottom, Lines);
+end;
+
+procedure TTerminalBuffer.AdvanceToNextLine(IsWrapped,
+  ResetColumn: Boolean);
+var
+  CurrentLines: TList<TTerminalLine>;
+  Line: TTerminalLine;
+begin
+  CurrentLines := GetCurrentLines;
+  Line := CurrentLines[FCursor.Y];
+  Line.IsWrapped := IsWrapped;
+  CurrentLines[FCursor.Y] := Line;
+
+  if ResetColumn then
+    FCursor.X := 0;
+  if FCursor.Y = FScrollBottom then
+    ScrollUp(1)
+  else
+    FCursor.Y := Min(FCursor.Y + 1, FHeight - 1);
 end;
 
 procedure TTerminalBuffer.DeleteLine(Y: Integer; Count: Integer);
@@ -419,14 +509,14 @@ begin
     if (Index >= 0) and (Index < CurrentLines.Count) then
       Result := CurrentLines[Index]
     else
-      Result := nil;
+      Result := Default(TTerminalLine);
     Exit;
   end;
   CurrentLines := FLines;
   TotalHistory := FScrollback.Count;
   TargetIndex := (TotalHistory + Index) - FViewportOffset;
   if TargetIndex < 0 then
-    Result := nil
+    Result := Default(TTerminalLine)
   else if TargetIndex < TotalHistory then
     Result := FScrollback[TargetIndex]
   else
@@ -435,7 +525,7 @@ begin
     if (TargetIndex >= 0) and (TargetIndex < CurrentLines.Count) then
       Result := CurrentLines[TargetIndex]
     else
-      Result := nil;
+      Result := Default(TTerminalLine);
   end;
 end;
 
@@ -459,10 +549,34 @@ procedure TTerminalBuffer.ClearLine(Y: Integer; Mode: Integer);
 var
   CurrentLines: TList<TTerminalLine>;
   Line: TTerminalLine;
-  I, StartX, EndX: Integer;
+  Row, LogicalStart, StartX, EndX: Integer;
 begin
   CurrentLines := GetCurrentLines;
   if (Y < 0) or (Y >= CurrentLines.Count) then Exit;
+
+  // Readline redraws an input line after SIGWINCH as CR + EL + text.
+  // If the old input occupied several soft-wrapped rows, EL must replace
+  // that logical line, otherwise every redraw leaves its previous head.
+  if FCarriageReturnPending and (Mode = 0) and (FCursor.X = 0) then
+  begin
+    LogicalStart := Y;
+    while (LogicalStart > 0) and CurrentLines[LogicalStart - 1].IsWrapped do
+      Dec(LogicalStart);
+    if LogicalStart < Y then
+    begin
+      for Row := LogicalStart to Y do
+      begin
+        Line := CurrentLines[Row];
+        ClearCellRange(Line, 0, High(Line.Cells), FCurrentAttributes);
+        Line.IsWrapped := False;
+        CurrentLines[Row] := Line;
+        SetDirty(Row);
+      end;
+      FCursor.Y := LogicalStart;
+      FCarriageReturnPending := False;
+      Exit;
+    end;
+  end;
   
   Line := CurrentLines[Y];
   
@@ -474,17 +588,13 @@ begin
     Exit;
   end;
   
-  for I := StartX to EndX do
-  begin
-    if I < Length(Line) then
-    begin
-      Line[I].Char := ' ';
-      Line[I].Attributes := FCurrentAttributes;
-      Line[I].Width := 1;
-    end;
-  end;
+  ClearCellRange(Line, StartX, EndX, FCurrentAttributes);
+  NormalizeWideCells(Line, FCurrentAttributes);
+  if (Mode = 2) or ((Mode = 0) and (StartX = 0)) then
+    Line.IsWrapped := False;
   
   CurrentLines[Y] := Line;
+  FCarriageReturnPending := False;
   SetDirty(Y);
 end;
 
@@ -496,10 +606,16 @@ var
   CharWidth: Integer;
   ShouldMerge: Boolean;
   PrevChar: string;
+  PrevX: Integer;
 begin
   ResetViewport;
   CurrentLines := GetCurrentLines;
-  
+
+  (* Печатные ASCII-символы (подавляющее большинство обычного текстового
+     вывода) разделяют одну heap-строку на весь процесс вместо отдельной
+     аллокации на каждую ячейку буфера/истории - см. InternAsciiChar. *)
+  Ch := InternAsciiChar(Ch);
+
   // Коррекция позиции курсора
   if (FCursor.Y < 0) or (FCursor.Y >= FHeight) or (FCursor.X < 0) or
     (FCursor.X > FWidth) then
@@ -517,19 +633,14 @@ begin
         Exit;
       #10: // Line Feed
         begin
-          if FCursor.Y = FScrollBottom then
-            ScrollUp(1)
-          else
-          begin
-            Inc(FCursor.Y);
-            if FCursor.Y >= FHeight then
-              FCursor.Y := FHeight - 1;
-          end;
+          FCarriageReturnPending := False;
+          AdvanceToNextLine(False, False);
           Exit;
         end;
       #13: // Carriage Return
         begin
           FCursor.X := 0;
+          FCarriageReturnPending := True;
           Exit;
         end;
       #8:  // Backspace
@@ -542,30 +653,24 @@ begin
         begin
           FCursor.X := ((FCursor.X div 8) + 1) * 8;
           if FCursor.X >= FWidth then
-          begin
-            FCursor.X := 0;
-            if FCursor.Y = FScrollBottom then
-              ScrollUp(1)
-            else
-            begin
-              Inc(FCursor.Y);
-              if FCursor.Y >= FHeight then
-                FCursor.Y := FHeight - 1;
-            end;
-          end;
+            AdvanceToNextLine(False, True);
           Exit;
         end;
     end;
   end;
 
   // Zero-width символы (ZWJ, variation selectors) — склеиваем с предыдущим
+  FCarriageReturnPending := False;
   if IsZeroWidthChar(Ch) then
   begin
     if FCursor.X > 0 then
     begin
       EnsureLine(FCursor.Y);
       Line := CurrentLines[FCursor.Y];
-      Line[FCursor.X - 1].Char := Line[FCursor.X - 1].Char + Ch;
+      PrevX := FCursor.X - 1;
+      if (PrevX > 0) and (Line.Cells[PrevX].Width = 0) then
+        Dec(PrevX);
+      Line.Cells[PrevX].Char := Line.Cells[PrevX].Char + Ch;
       CurrentLines[FCursor.Y] := Line;
       SetDirty(FCursor.Y);
     end;
@@ -579,31 +684,13 @@ begin
 
   // Автоперенос строки
   if FCursor.X >= FWidth then
-  begin
-    FCursor.X := 0;
-    if FCursor.Y = FScrollBottom then
-      ScrollUp(1)
-    else
-    begin
-      Inc(FCursor.Y);
-      if FCursor.Y >= FHeight then
-        FCursor.Y := FHeight - 1;
-    end;
-  end;
+    AdvanceToNextLine(True, True);
   
   // Для wide-символов проверяем, влезет ли
   if (CharWidth = 2) and (FCursor.X = FWidth - 1) then
   begin
     // Wide-символ не влезает — переносим на следующую строку
-    FCursor.X := 0;
-    if FCursor.Y = FScrollBottom then
-      ScrollUp(1)
-    else
-    begin
-      Inc(FCursor.Y);
-      if FCursor.Y >= FHeight then
-        FCursor.Y := FHeight - 1;
-    end;
+    AdvanceToNextLine(True, True);
   end;
 
   if FCursor.Y > FScrollBottom then
@@ -614,9 +701,13 @@ begin
 
   // Проверка на склейку ZWJ-последовательностей (для combining marks)
   ShouldMerge := False;
+  PrevX := -1;
   if (Length(Ch) > 0) and (FCursor.X > 0) then
   begin
-    PrevChar := Line[FCursor.X - 1].Char;
+    PrevX := FCursor.X - 1;
+    if (PrevX > 0) and (Line.Cells[PrevX].Width = 0) then
+      Dec(PrevX);
+    PrevChar := Line.Cells[PrevX].Char;
     // Если предыдущий символ заканчивается на ZWJ — склеиваем
     if (Length(PrevChar) > 0) and (PrevChar[Length(PrevChar)] = #$200D) then
       ShouldMerge := True;
@@ -624,7 +715,7 @@ begin
 
   if ShouldMerge then
   begin
-    Line[FCursor.X - 1].Char := Line[FCursor.X - 1].Char + Ch;
+    Line.Cells[PrevX].Char := Line.Cells[PrevX].Char + Ch;
     CurrentLines[FCursor.Y] := Line;
     SetDirty(FCursor.Y);
     Exit;
@@ -635,18 +726,18 @@ begin
   ClearWideCharTail(Line, FCursor.X);
 
   // Записываем символ
-  Line[FCursor.X].Char := Ch;
-  Line[FCursor.X].Attributes := Attr;
-  Line[FCursor.X].Width := CharWidth;
+  Line.Cells[FCursor.X].Char := Ch;
+  Line.Cells[FCursor.X].Attributes := Attr;
+  Line.Cells[FCursor.X].Width := CharWidth;
   
   // Если wide — помечаем следующую ячейку как продолжение
   if (CharWidth = 2) and (FCursor.X + 1 < FWidth) then
   begin
     ClearWideCharHead(Line, FCursor.X + 1);
     ClearWideCharTail(Line, FCursor.X + 1);
-    Line[FCursor.X + 1].Char := '';
-    Line[FCursor.X + 1].Width := 0;  // Маркер "продолжение"
-    Line[FCursor.X + 1].Attributes := Attr;
+    Line.Cells[FCursor.X + 1].Char := '';
+    Line.Cells[FCursor.X + 1].Width := 0;  // Маркер "продолжение"
+    Line.Cells[FCursor.X + 1].Attributes := Attr;
   end;
 
   CurrentLines[FCursor.Y] := Line;
@@ -669,15 +760,15 @@ begin
   I := 1;
   while I <= Length(Text) do
   begin
-    S := '';
     Ch := Text[I];
-    S := S + Ch;
+    S := Ch;
     Inc(I);
     // Если суррогатная пара, берем второй символ
     if Ch.IsHighSurrogate and (I <= Length(Text)) and
       Text[I].IsLowSurrogate then
     begin
-      S := S + Text[I];
+      SetLength(S, 2);
+      S[2] := Text[I];
       Inc(I);
     end;
     WriteChar(S, Attr);
@@ -711,27 +802,20 @@ procedure TTerminalBuffer.InsertChar(X, Y: Integer; Count: Integer);
 var
   CurrentLines: TList<TTerminalLine>;
   Line: TTerminalLine;
-  I: Integer;
+  I, CellCount: Integer;
 begin
   CurrentLines := GetCurrentLines;
   if (Y < 0) or (Y >= CurrentLines.Count) then Exit;
   Line := CurrentLines[Y];
-  
-  for I := FWidth - 1 downto X + Count do
-  begin
-    if I < Length(Line) then
-      Line[I] := Line[I - Count];
-  end;
-  
-  for I := X to Min(X + Count - 1, FWidth - 1) do
-  begin
-    if I < Length(Line) then
-    begin
-      Line[I].Char := ' ';
-      Line[I].Attributes := FCurrentAttributes;
-      Line[I].Width := 1;
-    end;
-  end;
+  CellCount := Min(FWidth, Length(Line.Cells));
+  X := EnsureRange(X, 0, CellCount);
+  Count := EnsureRange(Count, 0, CellCount - X);
+  if Count = 0 then Exit;
+
+  for I := CellCount - 1 downto X + Count do
+    Line.Cells[I] := Line.Cells[I - Count];
+  ClearCellRange(Line, X, X + Count - 1, FCurrentAttributes);
+  NormalizeWideCells(Line, FCurrentAttributes);
   
   CurrentLines[Y] := Line;
   SetDirty(Y);
@@ -741,27 +825,21 @@ procedure TTerminalBuffer.DeleteChar(X, Y: Integer; Count: Integer);
 var
   CurrentLines: TList<TTerminalLine>;
   Line: TTerminalLine;
-  I: Integer;
+  I, CellCount: Integer;
 begin
   CurrentLines := GetCurrentLines;
   if (Y < 0) or (Y >= CurrentLines.Count) then Exit;
   Line := CurrentLines[Y];
-  
-  for I := X to FWidth - 1 - Count do
-  begin
-    if (I < Length(Line)) and (I + Count < Length(Line)) then
-      Line[I] := Line[I + Count];
-  end;
-  
-  for I := Max(X, FWidth - Count) to FWidth - 1 do
-  begin
-    if I < Length(Line) then
-    begin
-      Line[I].Char := ' ';
-      Line[I].Attributes := FCurrentAttributes;
-      Line[I].Width := 1;
-    end;
-  end;
+  CellCount := Min(FWidth, Length(Line.Cells));
+  X := EnsureRange(X, 0, CellCount);
+  Count := EnsureRange(Count, 0, CellCount - X);
+  if Count = 0 then Exit;
+
+  for I := X to CellCount - Count - 1 do
+    Line.Cells[I] := Line.Cells[I + Count];
+  ClearCellRange(Line, CellCount - Count, CellCount - 1,
+    FCurrentAttributes);
+  NormalizeWideCells(Line, FCurrentAttributes);
   
   CurrentLines[Y] := Line;
   SetDirty(Y);
@@ -771,21 +849,18 @@ procedure TTerminalBuffer.EraseChar(X, Y: Integer; Count: Integer);
 var
   CurrentLines: TList<TTerminalLine>;
   Line: TTerminalLine;
-  I: Integer;
+  CellCount: Integer;
 begin
   CurrentLines := GetCurrentLines;
   if (Y < 0) or (Y >= CurrentLines.Count) then Exit;
   Line := CurrentLines[Y];
-  
-  for I := X to Min(X + Count - 1, FWidth - 1) do
-  begin
-    if I < Length(Line) then
-    begin
-      Line[I].Char := ' ';
-      Line[I].Attributes := FCurrentAttributes;
-      Line[I].Width := 1;
-    end;
-  end;
+  CellCount := Min(FWidth, Length(Line.Cells));
+  X := EnsureRange(X, 0, CellCount);
+  Count := EnsureRange(Count, 0, CellCount - X);
+  if Count = 0 then Exit;
+
+  ClearCellRange(Line, X, X + Count - 1, FCurrentAttributes);
+  NormalizeWideCells(Line, FCurrentAttributes);
   
   CurrentLines[Y] := Line;
   SetDirty(Y);
@@ -794,8 +869,15 @@ end;
 procedure TTerminalBuffer.SwitchToAlternateBuffer;
 var
   I: Integer;
+  CursorVisible: Boolean;
+  CursorShape: TTerminalCursorShape;
+  CursorBlink: Boolean;
 begin
   if FUseAlternateBuffer then Exit;
+
+  CursorVisible := FCursor.Visible;
+  CursorShape := FCursor.Shape;
+  CursorBlink := FCursor.Blink;
   
   // Сохраняем состояние main buffer
   FSavedCursorMain := FCursor;
@@ -809,6 +891,9 @@ begin
   
   FUseAlternateBuffer := True;
   FCursor := FSavedCursorAlt;
+  FCursor.Visible := CursorVisible;
+  FCursor.Shape := CursorShape;
+  FCursor.Blink := CursorBlink;
   FScrollTop := FSavedScrollTopAlt;
   FScrollBottom := FSavedScrollBottomAlt;
   
@@ -819,8 +904,16 @@ begin
 end;
 
 procedure TTerminalBuffer.SwitchToMainBuffer;
+var
+  CursorVisible: Boolean;
+  CursorShape: TTerminalCursorShape;
+  CursorBlink: Boolean;
 begin
   if not FUseAlternateBuffer then Exit;
+
+  CursorVisible := FCursor.Visible;
+  CursorShape := FCursor.Shape;
+  CursorBlink := FCursor.Blink;
   
   // Сохраняем состояние alternate buffer
   FSavedCursorAlt := FCursor;
@@ -829,6 +922,9 @@ begin
   
   FUseAlternateBuffer := False;
   FCursor := FSavedCursorMain;
+  FCursor.Visible := CursorVisible;
+  FCursor.Shape := CursorShape;
+  FCursor.Blink := CursorBlink;
   FScrollTop := FSavedScrollTopMain;
   FScrollBottom := FSavedScrollBottomMain;
   
@@ -839,62 +935,235 @@ begin
 end;
 
 procedure TTerminalBuffer.SetTheme(ATheme: TTerminalTheme);
-var
-  OldTheme: TTerminalTheme;
 begin
   if FTheme = ATheme then Exit;
-  
-  OldTheme := TTerminalTheme.Create;
-  try
-    OldTheme.Assign(FTheme);
-    FTheme.Assign(ATheme);
-    
-    RemapBufferColors(FLines, OldTheme, FTheme);
-    RemapBufferColors(FAlternateBuffer, OldTheme, FTheme);
-    RemapBufferColors(FScrollback, OldTheme, FTheme);
-    
-    FCurrentAttributes.Reset(FTheme);
-  finally
-    OldTheme.Free;
-  end;
+
+  FTheme.Assign(ATheme);
+  RemapBufferColors(FLines, FTheme);
+  RemapBufferColors(FAlternateBuffer, FTheme);
+  RemapBufferColors(FScrollback, FTheme);
+  FCurrentAttributes.Reset(FTheme);
   
   SetAllDirty;
 end;
 
 procedure TTerminalBuffer.RemapBufferColors(Buffer: TList<TTerminalLine>;
-  OldTheme, NewTheme: TTerminalTheme);
+  NewTheme: TTerminalTheme);
 var
-  I, J, K: Integer;
+  I, J: Integer;
   Line: TTerminalLine;
 begin
   for I := 0 to Buffer.Count - 1 do
   begin
     Line := Buffer[I];
-    for J := 0 to High(Line) do
+    for J := 0 to High(Line.Cells) do
     begin
       // Remap foreground
-      if Line[J].Attributes.ForegroundColor = OldTheme.DefaultFG then
-        Line[J].Attributes.ForegroundColor := NewTheme.DefaultFG
-      else
-        for K := 0 to 15 do
-          if Line[J].Attributes.ForegroundColor = OldTheme.AnsiColors[K] then
-          begin
-            Line[J].Attributes.ForegroundColor := NewTheme.AnsiColors[K];
-            Break;
-          end;
+      if Line.Cells[J].Attributes.ForegroundSource = tcsDefault then
+        Line.Cells[J].Attributes.ForegroundColor := NewTheme.DefaultFG
+      else if Line.Cells[J].Attributes.ForegroundSource = tcsAnsi then
+        Line.Cells[J].Attributes.ForegroundColor := NewTheme.AnsiColors[
+          EnsureRange(Line.Cells[J].Attributes.ForegroundIndex, 0, 15)];
       
       // Remap background
-      if Line[J].Attributes.BackgroundColor = OldTheme.DefaultBG then
-        Line[J].Attributes.BackgroundColor := NewTheme.DefaultBG
-      else
-        for K := 0 to 15 do
-          if Line[J].Attributes.BackgroundColor = OldTheme.AnsiColors[K] then
-          begin
-            Line[J].Attributes.BackgroundColor := NewTheme.AnsiColors[K];
-            Break;
-          end;
+      if Line.Cells[J].Attributes.BackgroundSource = tcsDefault then
+        Line.Cells[J].Attributes.BackgroundColor := NewTheme.DefaultBG
+      else if Line.Cells[J].Attributes.BackgroundSource = tcsAnsi then
+        Line.Cells[J].Attributes.BackgroundColor := NewTheme.AnsiColors[
+          EnsureRange(Line.Cells[J].Attributes.BackgroundIndex, 0, 15)];
     end;
     Buffer[I] := Line;
+  end;
+end;
+
+procedure TTerminalBuffer.ReflowMainBuffer(NewWidth, NewHeight: Integer);
+var
+  AllLines, Reflowed: TList<TTerminalLine>;
+  Glyphs: TList<TTerminalChar>;
+  Source, Dest: TTerminalLine;
+  I, J, K, ChainStart, ChainEnd, Limit, Col, CellWidth, ActiveLast: Integer;
+  OldCursorAbs, CursorLogicalOffset, ChainColumns: Integer;
+  NewCursorAbs, NewCursorX, OutputStart, ScreenStart: Integer;
+  OldViewportAnchor, NewViewportAnchor, AnchorLogicalOffset: Integer;
+  TrimCount: Integer;
+  CursorInChain, AnchorInChain: Boolean;
+  BlankAttributes: TCharAttributes;
+
+  function NewBlankLine: TTerminalLine;
+  var
+    X: Integer;
+  begin
+    Result := Default(TTerminalLine);
+    SetLength(Result.Cells, NewWidth);
+    for X := 0 to NewWidth - 1 do
+    begin
+      Result.Cells[X].Char := ' ';
+      Result.Cells[X].Attributes := BlankAttributes;
+      Result.Cells[X].Width := 1;
+    end;
+  end;
+
+  function LastUsedColumn(const ALine: TTerminalLine): Integer;
+  begin
+    Result := Min(FWidth, Length(ALine.Cells));
+    while (Result > 0) and (ALine.Cells[Result - 1].Char = ' ') and
+      (ALine.Cells[Result - 1].Width <> 0) do
+      Dec(Result);
+  end;
+
+  function IsBlankLine(const ALine: TTerminalLine): Boolean;
+  begin
+    Result := LastUsedColumn(ALine) = 0;
+  end;
+
+begin
+  BlankAttributes := TCharAttributes.Default(FTheme);
+  AllLines := TList<TTerminalLine>.Create;
+  Reflowed := TList<TTerminalLine>.Create;
+  Glyphs := TList<TTerminalChar>.Create;
+  try
+    AllLines.Capacity := FScrollback.Count + FLines.Count;
+    AllLines.AddRange(FScrollback);
+    ActiveLast := EnsureRange(FCursor.Y, 0, FLines.Count - 1);
+    for I := FLines.Count - 1 downto ActiveLast + 1 do
+      if not IsBlankLine(FLines[I]) then
+      begin
+        ActiveLast := I;
+        Break;
+      end;
+    for I := 0 to ActiveLast do
+      AllLines.Add(FLines[I]);
+    OldCursorAbs := FScrollback.Count + FCursor.Y;
+    if FViewportOffset > 0 then
+      OldViewportAnchor := Max(0, FScrollback.Count - FViewportOffset)
+    else
+      OldViewportAnchor := -1;
+    NewCursorAbs := 0;
+    NewCursorX := 0;
+    NewViewportAnchor := -1;
+
+    I := 0;
+    while I < AllLines.Count do
+    begin
+      ChainStart := I;
+      ChainEnd := I;
+      while (ChainEnd < AllLines.Count - 1) and
+        AllLines[ChainEnd].IsWrapped do
+        Inc(ChainEnd);
+
+      Glyphs.Clear;
+      ChainColumns := 0;
+      CursorLogicalOffset := 0;
+      AnchorLogicalOffset := 0;
+      CursorInChain := (OldCursorAbs >= ChainStart) and
+        (OldCursorAbs <= ChainEnd);
+      AnchorInChain := (OldViewportAnchor >= ChainStart) and
+        (OldViewportAnchor <= ChainEnd);
+
+      for J := ChainStart to ChainEnd do
+      begin
+        Source := AllLines[J];
+        if Source.IsWrapped then
+          Limit := Min(FWidth, Length(Source.Cells))
+        else
+          Limit := LastUsedColumn(Source);
+
+        if J = OldCursorAbs then
+        begin
+          Limit := Max(Limit, Min(FCursor.X, FWidth));
+          CursorLogicalOffset := ChainColumns + Min(FCursor.X, FWidth);
+        end;
+        if J = OldViewportAnchor then
+          AnchorLogicalOffset := ChainColumns;
+
+        for K := 0 to Limit - 1 do
+          if Source.Cells[K].Width <> 0 then
+            Glyphs.Add(Source.Cells[K]);
+        Inc(ChainColumns, Limit);
+      end;
+
+      OutputStart := Reflowed.Count;
+      Dest := NewBlankLine;
+      Col := 0;
+      for K := 0 to Glyphs.Count - 1 do
+      begin
+        CellWidth := Max(1, Glyphs[K].Width);
+        if CellWidth > NewWidth then
+          CellWidth := NewWidth;
+        if Col + CellWidth > NewWidth then
+        begin
+          Dest.IsWrapped := True;
+          Reflowed.Add(Dest);
+          Dest := NewBlankLine;
+          Col := 0;
+        end;
+        Dest.Cells[Col] := Glyphs[K];
+        Dest.Cells[Col].Width := CellWidth;
+        if CellWidth = 2 then
+        begin
+          Dest.Cells[Col + 1].Char := '';
+          Dest.Cells[Col + 1].Attributes := Glyphs[K].Attributes;
+          Dest.Cells[Col + 1].Width := 0;
+        end;
+        Inc(Col, CellWidth);
+      end;
+      Reflowed.Add(Dest);
+
+      if CursorInChain then
+      begin
+        if (CursorLogicalOffset > 0) and
+          ((CursorLogicalOffset mod NewWidth) = 0) then
+        begin
+          NewCursorAbs := OutputStart + (CursorLogicalOffset div NewWidth) - 1;
+          NewCursorX := NewWidth;
+        end
+        else
+        begin
+          NewCursorAbs := OutputStart + (CursorLogicalOffset div NewWidth);
+          NewCursorX := CursorLogicalOffset mod NewWidth;
+        end;
+      end;
+      if AnchorInChain then
+        NewViewportAnchor := OutputStart +
+          (AnchorLogicalOffset div NewWidth);
+
+      I := ChainEnd + 1;
+    end;
+
+    while Reflowed.Count < NewHeight do
+      Reflowed.Add(NewBlankLine);
+
+    ScreenStart := Max(0, Reflowed.Count - NewHeight);
+    FScrollback.Clear;
+    for I := 0 to ScreenStart - 1 do
+      FScrollback.Add(Reflowed[I]);
+    TrimCount := Min(FScrollback.Count,
+      Max(0, FScrollback.Count - FMaxScrollback));
+    if TrimCount > 0 then
+    begin
+      FScrollback.DeleteRange(0, TrimCount);
+      Dec(NewCursorAbs, TrimCount);
+      if NewViewportAnchor >= 0 then
+        Dec(NewViewportAnchor, TrimCount);
+    end;
+
+    FLines.Clear;
+    for I := ScreenStart to Reflowed.Count - 1 do
+      FLines.Add(Reflowed[I]);
+
+    FCursor.X := EnsureRange(NewCursorX, 0, NewWidth);
+    FCursor.Y := EnsureRange(NewCursorAbs - FScrollback.Count, 0,
+      NewHeight - 1);
+    if NewViewportAnchor >= 0 then
+      FViewportOffset := EnsureRange(FScrollback.Count - NewViewportAnchor,
+        0, FScrollback.Count)
+    else
+      FViewportOffset := 0;
+    FHasSelection := False;
+  finally
+    Glyphs.Free;
+    Reflowed.Free;
+    AllLines.Free;
   end;
 end;
 
@@ -902,137 +1171,69 @@ procedure TTerminalBuffer.Resize(NewWidth, NewHeight: Integer);
 var
   I, J: Integer;
   NewLine: TTerminalLine;
-  LinesDiff: Integer;
+  AlternateCursor: TTerminalCursor;
 begin
   if (NewWidth <= 0) or (NewHeight <= 0) then Exit;
   if (NewWidth = FWidth) and (NewHeight = FHeight) then Exit;
 
-  // 1. ИЗМЕНЕНИЕ ВЫСОТЫ (Умный скроллинг)
-  LinesDiff := NewHeight - FHeight;
-
-  if LinesDiff < 0 then
+  if not FUseAlternateBuffer then
   begin
-    // === ОКНО УМЕНЬШАЕТСЯ (СУЖЕНИЕ) ===
-    // Мы должны убрать ВЕРХНИЕ строки экрана в историю,
-    // чтобы НИЖНИЕ (где курсор) остались на экране.
+    ReflowMainBuffer(NewWidth, NewHeight);
+    FWidth := NewWidth;
+    FHeight := NewHeight;
+    FScrollTop := 0;
+    FScrollBottom := FHeight - 1;
+    SetLength(FLinesDirty, FHeight);
+    SetAllDirty;
+    Exit;
+  end;
 
-    for I := 1 to Abs(LinesDiff) do
+  // Alternate screen is a disposable grid redrawn by fullscreen apps after
+  // SIGWINCH. The saved main screen is independent and must be reflowed with
+  // its own cursor; truncating its physical cells destroys shell history.
+  AlternateCursor := FCursor;
+  FCursor := FSavedCursorMain;
+  ReflowMainBuffer(NewWidth, NewHeight);
+  FSavedCursorMain := FCursor;
+  FCursor := AlternateCursor;
+
+  while FAlternateBuffer.Count > NewHeight do
+    FAlternateBuffer.Delete(FAlternateBuffer.Count - 1);
+  while FAlternateBuffer.Count < NewHeight do
+    FAlternateBuffer.Add(CreateBlankLine);
+
+  for I := 0 to FAlternateBuffer.Count - 1 do
+  begin
+    NewLine := FAlternateBuffer[I];
+    if NewWidth > Length(NewLine.Cells) then
     begin
-      // Если это не Alt-буфер, сохраняем верхнюю строку в историю
-      if not FUseAlternateBuffer then
+      J := Length(NewLine.Cells);
+      SetLength(NewLine.Cells, NewWidth);
+      while J < NewWidth do
       begin
-        FScrollback.Add(FLines[0]);
-        if FScrollback.Count > FMaxScrollback then
-          FScrollback.Delete(0);
+        NewLine.Cells[J].Char := ' ';
+        NewLine.Cells[J].Attributes := TCharAttributes.Default(FTheme);
+        NewLine.Cells[J].Width := 1;
+        Inc(J);
       end;
-
-      // Удаляем верхнюю строку (все остальные сдвигаются вверх)
-      FLines.Delete(0);
-
-      // КУРСОР: Так как все строки сдвинулись вверх (индекс уменьшился),
-      // курсор тоже должен уменьшить свой Y.
-      if FCursor.Y > 0 then
-        Dec(FCursor.Y);
-    end;
-  end
-  else if LinesDiff > 0 then
-  begin
-    // При расширении не вытягиваем scrollback наверх: это сдвигает
-    // активную командную строку вниз при изменении размера панели.
-    for I := 1 to LinesDiff do
-      FLines.Add(CreateBlankLine);
+    end
+    else
+      SetLength(NewLine.Cells, NewWidth);
+    NewLine.IsWrapped := False;
+    FAlternateBuffer[I] := NewLine;
   end;
 
-  // На всякий случай подгоняем размер под точный NewHeight (страховка)
-  while FLines.Count > NewHeight do FLines.Delete(FLines.Count - 1);
-  while FLines.Count < NewHeight do FLines.Add(CreateBlankLine);
-
-  // Обработка альтернативного буфера (там истории нет, просто ресайз)
-  while FAlternateBuffer.Count < NewHeight do FAlternateBuffer.Add(CreateBlankLine);
-  while FAlternateBuffer.Count > NewHeight do FAlternateBuffer.Delete(FAlternateBuffer.Count - 1);
-
-
-  // 2. ИЗМЕНЕНИЕ ШИРИНЫ
-  if NewWidth <> FWidth then
-  begin
-    // Основной буфер
-    for I := 0 to FLines.Count - 1 do
-    begin
-      NewLine := FLines[I];
-      if NewWidth > Length(NewLine) then
-      begin
-        var OldLen := Length(NewLine);
-        SetLength(NewLine, NewWidth);
-        for J := OldLen to NewWidth - 1 do
-        begin
-          NewLine[J].Char := ' ';
-          NewLine[J].Attributes := TCharAttributes.Default(FTheme);
-          NewLine[J].Width := 1;
-        end;
-      end
-      else
-        SetLength(NewLine, NewWidth);
-      FLines[I] := NewLine;
-    end;
-
-    // Альтернативный буфер
-    for I := 0 to FAlternateBuffer.Count - 1 do
-    begin
-      NewLine := FAlternateBuffer[I];
-      if NewWidth > Length(NewLine) then
-      begin
-        var OldLen := Length(NewLine);
-        SetLength(NewLine, NewWidth);
-        for J := OldLen to NewWidth - 1 do
-        begin
-          NewLine[J].Char := ' ';
-          NewLine[J].Attributes := TCharAttributes.Default(FTheme);
-          NewLine[J].Width := 1;
-        end;
-      end
-      else
-        SetLength(NewLine, NewWidth);
-      FAlternateBuffer[I] := NewLine;
-    end;
-
-    // История (scrollback) - иначе прокрученные строки остаются
-    // старой ширины и отображаются обрезанными/неровными
-    for I := 0 to FScrollback.Count - 1 do
-    begin
-      NewLine := FScrollback[I];
-      if NewWidth > Length(NewLine) then
-      begin
-        var OldLen := Length(NewLine);
-        SetLength(NewLine, NewWidth);
-        for J := OldLen to NewWidth - 1 do
-        begin
-          NewLine[J].Char := ' ';
-          NewLine[J].Attributes := TCharAttributes.Default(FTheme);
-          NewLine[J].Width := 1;
-        end;
-      end
-      else
-        SetLength(NewLine, NewWidth);
-      FScrollback[I] := NewLine;
-    end;
-  end;
-
-  // 3. ФИНАЛИЗАЦИЯ
   FWidth := NewWidth;
   FHeight := NewHeight;
-
-  // Важно: при ресайзе сбрасываем регион скроллинга на полный экран,
-  // иначе `top` и `bottom` могут указывать за пределы массива.
-  FScrollTop := 0;
-  FScrollBottom := FHeight - 1;
-
-  SetLength(FLinesDirty, FHeight);
-
-  // Удерживаем курсор в границах
   FCursor.X := EnsureRange(FCursor.X, 0, FWidth - 1);
   FCursor.Y := EnsureRange(FCursor.Y, 0, FHeight - 1);
-
+  FScrollTop := 0;
+  FScrollBottom := FHeight - 1;
+  FSavedScrollTopMain := 0;
+  FSavedScrollBottomMain := FHeight - 1;
+  SetLength(FLinesDirty, FHeight);
   SetAllDirty;
+  Exit;
 end;
 
 procedure TTerminalBuffer.ProcessCommand(const Cmd: TAnsiCommand);
@@ -1124,7 +1325,17 @@ begin
                  ClearLine(M, 2);
                ClearLine(FCursor.Y, 1);
              end;
-          2, 3: Clear;
+          2: Clear;
+          3: begin
+               (* ESC[3J - xterm-расширение "erase saved lines": именно эту
+                  последовательность шлёт `clear` в современных дистрибутивах
+                  (E3-capability в terminfo). Помимо видимого экрана нужно
+                  стирать ещё и историю, иначе `clear` выглядит рабочим, а
+                  scrollback молча продолжает копиться. *)
+               Clear;
+               FScrollback.Clear;
+               ResetViewport;
+             end;
         end;
       end;
     
@@ -1210,6 +1421,8 @@ begin
         FCursor.X := 0;
         FCursor.Y := 0;
         FCursor.Visible := True;
+        FCursor.Shape := tcsBlock;
+        FCursor.Blink := True;
         FAppCursorKeys := False;
         FMouseModes := [];
         FBracketedPaste := False;
@@ -1255,6 +1468,45 @@ begin
             1049, 47, 1047: SwitchToMainBuffer;
             2004: FBracketedPaste := False;
           end;
+      end;
+
+    apcSetCursorStyle:
+      begin
+        N := 0;
+        if Length(Cmd.Params) > 0 then
+          N := Cmd.Params[0];
+        case N of
+          0, 1:
+            begin
+              FCursor.Shape := tcsBlock;
+              FCursor.Blink := True;
+            end;
+          2:
+            begin
+              FCursor.Shape := tcsBlock;
+              FCursor.Blink := False;
+            end;
+          3:
+            begin
+              FCursor.Shape := tcsUnderline;
+              FCursor.Blink := True;
+            end;
+          4:
+            begin
+              FCursor.Shape := tcsUnderline;
+              FCursor.Blink := False;
+            end;
+          5:
+            begin
+              FCursor.Shape := tcsBar;
+              FCursor.Blink := True;
+            end;
+          6:
+            begin
+              FCursor.Shape := tcsBar;
+              FCursor.Blink := False;
+            end;
+        end;
       end;
     
     apcReverseIndex:
@@ -1304,6 +1556,20 @@ begin
     Result := (FScrollback.Count + ScreenY) - FViewportOffset;
 end;
 
+function TTerminalBuffer.GetLineByAbsoluteIndex(Index: Integer): TTerminalLine;
+begin
+  if FUseAlternateBuffer then
+  begin
+    if InRange(Index, 0, FAlternateBuffer.Count - 1) then
+      Exit(FAlternateBuffer[Index]);
+  end
+  else if InRange(Index, 0, FScrollback.Count - 1) then
+    Exit(FScrollback[Index])
+  else if InRange(Index - FScrollback.Count, 0, FLines.Count - 1) then
+    Exit(FLines[Index - FScrollback.Count]);
+  Result := Default(TTerminalLine);
+end;
+
 procedure TTerminalBuffer.NormalizeSelection;
 var
   Swap: TPoint;
@@ -1318,20 +1584,79 @@ begin
 end;
 
 procedure TTerminalBuffer.SetSelection(StartX, StartY, EndX, EndY: Integer);
+var
+  Line: TTerminalLine;
+  MaxY, OldStartY, OldEndY: Integer;
+  HadSelection: Boolean;
 begin
+  HadSelection := FHasSelection;
+  OldStartY := FSelStart.Y;
+  OldEndY := FSelEnd.Y;
+  MaxY := GetTotalLinesCount - 1;
+  if MaxY < 0 then
+  begin
+    ClearSelection;
+    Exit;
+  end;
+  StartY := EnsureRange(StartY, 0, MaxY);
+  EndY := EnsureRange(EndY, 0, MaxY);
   FSelStart := TPoint.Create(StartX, StartY);
   FSelEnd := TPoint.Create(EndX, EndY);
-  FHasSelection := True;
   NormalizeSelection;
-  SetAllDirty;
+
+  Line := GetLineByAbsoluteIndex(FSelStart.Y);
+  if Length(Line.Cells) > 0 then
+  begin
+    FSelStart.X := EnsureRange(FSelStart.X, 0, High(Line.Cells));
+    if (FSelStart.X > 0) and (Line.Cells[FSelStart.X].Width = 0) then
+      Dec(FSelStart.X);
+  end
+  else
+    FSelStart.X := 0;
+
+  Line := GetLineByAbsoluteIndex(FSelEnd.Y);
+  if Length(Line.Cells) > 0 then
+  begin
+    FSelEnd.X := EnsureRange(FSelEnd.X, 0, High(Line.Cells));
+    if (FSelEnd.X > 0) and (Line.Cells[FSelEnd.X].Width = 0) then
+      Dec(FSelEnd.X);
+  end
+  else
+    FSelEnd.X := 0;
+
+  FHasSelection := True;
+  if HadSelection then
+    SetSelectionRangeDirty(OldStartY, OldEndY);
+  SetSelectionRangeDirty(FSelStart.Y, FSelEnd.Y);
+end;
+
+procedure TTerminalBuffer.SetSelectionRangeDirty(StartAbsY,
+  EndAbsY: Integer);
+var
+  FirstScreenY, LastScreenY, ScreenOrigin, Temp: Integer;
+begin
+  if StartAbsY > EndAbsY then
+  begin
+    Temp := StartAbsY;
+    StartAbsY := EndAbsY;
+    EndAbsY := Temp;
+  end;
+  if FUseAlternateBuffer then
+    ScreenOrigin := 0
+  else
+    ScreenOrigin := FScrollback.Count - FViewportOffset;
+  FirstScreenY := Max(0, StartAbsY - ScreenOrigin);
+  LastScreenY := Min(FHeight - 1, EndAbsY - ScreenOrigin);
+  if FirstScreenY <= LastScreenY then
+    SetRangeDirty(FirstScreenY, LastScreenY);
 end;
 
 procedure TTerminalBuffer.ClearSelection;
 begin
   if FHasSelection then
   begin
+    SetSelectionRangeDirty(FSelStart.Y, FSelEnd.Y);
     FHasSelection := False;
-    SetAllDirty;
   end;
 end;
 
@@ -1355,32 +1680,9 @@ end;
 
 function TTerminalBuffer.GetSelectedText: string;
 var
-  X, StartX, EndX, AbsY, SBCount: Integer;
+  X, StartX, EndX, AbsY: Integer;
   Line: TTerminalLine;
   ResultStr: TStringBuilder;
-  
-  function GetLineByAbsIndex(Idx: Integer): TTerminalLine;
-  begin
-    if FUseAlternateBuffer then
-    begin
-      if (Idx >= 0) and (Idx < FAlternateBuffer.Count) then
-        Result := FAlternateBuffer[Idx]
-      else
-        Result := nil;
-    end
-    else
-    begin
-      SBCount := FScrollback.Count;
-      if Idx < 0 then
-        Result := nil
-      else if Idx < SBCount then
-        Result := FScrollback[Idx]
-      else if Idx < SBCount + FLines.Count then
-        Result := FLines[Idx - SBCount]
-      else
-        Result := nil;
-    end;
-  end;
 
 begin
   if not FHasSelection then
@@ -1390,9 +1692,7 @@ begin
   try
     for AbsY := FSelStart.Y to FSelEnd.Y do
     begin
-      Line := GetLineByAbsIndex(AbsY);
-      if Line = nil then
-        Continue;
+      Line := GetLineByAbsoluteIndex(AbsY);
       if AbsY = FSelStart.Y then
         StartX := FSelStart.X
       else
@@ -1400,16 +1700,20 @@ begin
       if AbsY = FSelEnd.Y then
         EndX := FSelEnd.X
       else
-        EndX := Length(Line) - 1;
-      if EndX >= Length(Line) then
-        EndX := Length(Line) - 1;
+        EndX := Length(Line.Cells) - 1;
+      StartX := EnsureRange(StartX, 0, Length(Line.Cells));
+      EndX := Min(EndX, High(Line.Cells));
+      if (AbsY < FSelEnd.Y) and not Line.IsWrapped then
+        while (EndX >= StartX) and (Line.Cells[EndX].Char = ' ') and
+          (Line.Cells[EndX].Width <> 0) do
+          Dec(EndX);
       for X := StartX to EndX do
       begin
         // Пропускаем "хвосты" wide-символов
-        if (Line[X].Width > 0) then
-          ResultStr.Append(Line[X].Char);
+        if (Line.Cells[X].Width > 0) then
+          ResultStr.Append(Line.Cells[X].Char);
       end;
-      if AbsY < FSelEnd.Y then
+      if (AbsY < FSelEnd.Y) and not Line.IsWrapped then
         ResultStr.Append(sLineBreak);
     end;
     Result := ResultStr.ToString;

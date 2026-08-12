@@ -4,8 +4,8 @@ interface
 
 uses
   System.SysUtils, System.Types, System.UITypes, System.Classes, System.Variants,
-  FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs, System.Skia,
-  System.Actions, FMX.ActnList, ModernSSHClient, FMX.Skia, Terminal.Control,
+  FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs,
+  System.Actions, FMX.ActnList, ModernSSHClient, Terminal.Control,
   FMX.StdCtrls, FMX.Controls.Presentation,  GoghThemeLoader,
   FMX.ListBox,  FMX.Edit;
 

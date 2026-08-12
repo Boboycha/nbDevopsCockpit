@@ -120,7 +120,7 @@
         <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductName=;ProductVersion=1.0.0.0;Comments=;CFBundleName=</VerInfo_Keys>
         <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;REST.Authenticator.OAuth.WebForm;Winapi;$(DCC_Namespace)</DCC_Namespace>
         <DCC_DcuOutput>..\dcu\$(Platform)\$(Config)</DCC_DcuOutput>
-        <DCC_UnitSearchPath>..\bin\$(Platform)\$(Config);Z:\VCL\synapse;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_UnitSearchPath>..\bin\$(Platform)\$(Config);..\third_party\FMXRichMemo;Z:\VCL\synapse;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Android)'!=''">
         <VerInfo_Keys>package=com.embarcadero.$(MSBuildProjectName);label=$(MSBuildProjectName);versionCode=1;versionName=1.0.0;persistent=False;restoreAnyVersion=False;installLocation=auto;largeHeap=False;theme=TitleBar;hardwareAccelerated=true;apiKey=;minSdkVersion=23;targetSdkVersion=36</VerInfo_Keys>
@@ -156,7 +156,7 @@
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
         <VerInfo_Locale>1033</VerInfo_Locale>
-        <DCC_UsePackage>rtl;Skia.Package.RTL;fmx;Skia.Package.FMX;$(DCC_UsePackage)</DCC_UsePackage>
+        <DCC_UsePackage>rtl;fmx;$(DCC_UsePackage)</DCC_UsePackage>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win64)'!=''">
         <DCC_UsePackage>rtl;fmx;$(DCC_UsePackage)</DCC_UsePackage>
@@ -202,8 +202,6 @@
         <DCCReference Include="rtl.dcp"/>
         <DCCReference Include="fmx.dcp"/>
         <DCCReference Include="DesignIDE.dcp"/>
-        <DCCReference Include="Skia.Package.RTL.dcp"/>
-        <DCCReference Include="Skia.Package.FMX.dcp"/>
         <DCCReference Include="nbSSH.LibSSH2.pas"/>
         <DCCReference Include="nbSSH.KeyValidation.pas"/>
         <DCCReference Include="nbFileSources.pas"/>
@@ -222,6 +220,19 @@
         <DCCReference Include="Terminal.Clipboard.pas"/>
         <DCCReference Include="Terminal.SSHBridge.pas"/>
         <DCCReference Include="Terminal.Control.pas"/>
+        <DCCReference Include="nbTextDocument.pas"/>
+        <DCCReference Include="nbCodeEditor.pas"/>
+        <DCCReference Include="..\third_party\FMXRichMemo\FMX.StyledContextMenu.pas"/>
+        <DCCReference Include="..\third_party\FMXRichMemo\Syntax.Code.pas"/>
+        <DCCReference Include="..\third_party\FMXRichMemo\Syntax.Code.Pascal.pas"/>
+        <DCCReference Include="..\third_party\FMXRichMemo\Syntax.Code.JSON.pas"/>
+        <DCCReference Include="..\third_party\FMXRichMemo\Syntax.Code.SQL.pas"/>
+        <DCCReference Include="..\third_party\FMXRichMemo\Syntax.Code.Python.pas"/>
+        <DCCReference Include="..\third_party\FMXRichMemo\Syntax.Code.HTML.pas"/>
+        <DCCReference Include="..\third_party\FMXRichMemo\Syntax.Code.CSS.pas"/>
+        <DCCReference Include="..\third_party\FMXRichMemo\Syntax.Code.MarkDown.pas"/>
+        <DCCReference Include="..\third_party\FMXRichMemo\Syntax.Code.Shell.pas"/>
+        <DCCReference Include="..\third_party\FMXRichMemo\FMX.RichEdit.Style.pas"/>
         <DCCReference Include="GoghThemeLoader.pas"/>
         <DCCReference Include="Reg_nbDevOpsCockpit.pas"/>
         <BuildConfiguration Include="Base">

@@ -1291,6 +1291,8 @@ begin
     if Terminated then Exit;
     if ReadLen < 0 then raise Exception.Create('Download failed');
     LSuccess := True;
+    Stream.Free;
+    Stream := nil;
     FCurrentPath := ARemotePath;
     Synchronize(DoTransferDone);
   finally
