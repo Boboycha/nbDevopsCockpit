@@ -31,14 +31,17 @@
 
 requires
   rtl,
+  dbrtl,
   fmx,
-  DesignIDE;
+  DesignIDE,
+  UniListViewRuntime;
 
 contains
   nbSSH.LibSSH2 in 'nbSSH.LibSSH2.pas',
   nbSSH.KeyValidation in 'nbSSH.KeyValidation.pas',
   nbFileSources in 'nbFileSources.pas',
   nbVectorIcons in 'nbVectorIcons.pas',
+  nbVectorButton in 'nbVectorButton.pas',
   nbFilePane.Controls in 'nbFilePane.Controls.pas',
   nbSFTPClient in 'nbSFTPClient.pas',
   nbSFTPTransfer in 'nbSFTPTransfer.pas',

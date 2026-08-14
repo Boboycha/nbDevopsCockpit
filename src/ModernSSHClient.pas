@@ -504,6 +504,8 @@ var
   Cols, Rows: Integer;
   ReadAnything: Boolean;
   WakeCmd: TSSHCommand;
+  KeepAliveRC, KeepAliveNext: Integer;
+  NextKeepAliveTick: UInt64;
 begin
   FCurrentStatus := ssConnecting;
   Synchronize(DoStatusChange);
@@ -668,6 +670,14 @@ begin
 
     ssh2_session_set_blocking(FSession, 0);
 
+    if Assigned(ssh2_keepalive_config) and Assigned(ssh2_keepalive_send) then
+    begin
+      ssh2_keepalive_config(FSession, 1, 30);
+      NextKeepAliveTick := TThread.GetTickCount64 + 30000;
+    end
+    else
+      NextKeepAliveTick := High(UInt64);
+
     FCurrentStatus := ssConnected;
     Synchronize(DoStatusChange);
 
@@ -701,6 +711,20 @@ begin
         Break;
 
       ProcessOutgoing;
+
+      if TThread.GetTickCount64 >= NextKeepAliveTick then
+      begin
+        KeepAliveNext := 0;
+        KeepAliveRC := ssh2_keepalive_send(FSession, @KeepAliveNext);
+        if (KeepAliveRC <> 0) and (KeepAliveRC <> LIBSSH2_ERROR_EAGAIN) then
+        begin
+          FOwner.FErrorMessage := 'SSH keepalive failed: ' + GetLibLastError;
+          Break;
+        end;
+        if KeepAliveNext <= 0 then
+          KeepAliveNext := 1;
+        NextKeepAliveTick := TThread.GetTickCount64 + UInt64(KeepAliveNext) * 1000;
+      end;
 
       if not ReadAnything then
         Sleep(15);

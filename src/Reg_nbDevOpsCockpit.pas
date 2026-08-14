@@ -20,6 +20,7 @@ uses
   ModernSSHClient,
   Terminal.Control,
   nbFilePane.Controls,
+  nbVectorButton,
   nbFilePane,
   nbSFTPClient,
   nbSFTPTransfer,
@@ -110,6 +111,7 @@ begin
     TnbTerminalControl,
     TnbFilePane,
     TnbToolButton,
+    TnbVectorButton,
     TnbSFTPClient,
     TnbSFTPTransfer,
     TnbCodeEditor
@@ -119,6 +121,7 @@ begin
     TnbSSHClient,
     TnbTerminalControl,
     TnbFilePane,
+    TnbVectorButton,
     TnbSFTPClient,
     TnbSFTPTransfer,
     TnbCodeEditor

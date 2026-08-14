@@ -167,7 +167,7 @@ protected
 
   published
     (* Свойства TControl, публикуемые заново: базовый класс сменился
-       с TSkPaintBox на TControl, а TControl их не публикует - без этого
+       на TControl, а TControl их не публикует - без этого
        ломается загрузка из .fmx. *)
     property Align;
     property Anchors;
