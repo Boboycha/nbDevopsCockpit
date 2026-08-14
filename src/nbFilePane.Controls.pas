@@ -72,6 +72,9 @@ begin
     Exit(FILE_ICON_UP);
   if ContainsText(AHint, 'обнов') or SameText(AGlyph, 'R') then
     Exit(FILE_ICON_REFRESH);
+  if ContainsText(AHint, 'новый файл') or ContainsText(AHint, 'new file')
+    or SameText(AGlyph, 'F') then
+    Exit(FILE_ICON_DOCUMENT);
   if ContainsText(AHint, 'новая папка') or (AGlyph = '+') then
     Exit(FILE_ICON_NEW_FOLDER);
   if ContainsText(AHint, 'переимен') or SameText(AGlyph, 'N') then

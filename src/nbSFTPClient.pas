@@ -30,7 +30,7 @@ type
   TnbSFTPClient = class;
 
   TSFTPCommandKind = (sckListDir, sckDownload, sckUpload, sckDelete, sckRemoveDir,
-    sckMakeDir, sckRename, sckDeleteDirRecursive);
+    sckMakeDir, sckCreateFile, sckRename, sckDeleteDirRecursive);
 
   TSFTPCommand = record
     Kind: TSFTPCommandKind;
@@ -124,6 +124,7 @@ type
     procedure CmdDelete(const ARemotePath: string);
     procedure CmdRemoveDir(const ARemotePath: string);
     procedure CmdMakeDir(const ARemotePath: string);
+    procedure CmdCreateFile(const ARemotePath: string);
     procedure CmdRename(const AOldPath, ANewPath: string);
     procedure CmdDeleteDirRecursive(const ARemotePath: string);
   protected
@@ -170,6 +171,7 @@ type
     procedure RemoveDir(const ARemotePath: string);
     procedure DeleteDir(const ARemotePath: string);
     procedure MakeDir(const ARemotePath: string);
+    procedure CreateFile(const ARemotePath: string);
     procedure Rename(const AOldPath, ANewPath: string);
 
   published
@@ -1173,6 +1175,7 @@ begin
     sckDelete: CmdDelete(ACmd.Path1);
     sckRemoveDir: CmdRemoveDir(ACmd.Path1);
     sckMakeDir: CmdMakeDir(ACmd.Path1);
+    sckCreateFile: CmdCreateFile(ACmd.Path1);
     sckRename: CmdRename(ACmd.Path1, ACmd.Path2);
     sckDeleteDirRecursive: CmdDeleteDirRecursive(ACmd.Path1);
   end;
@@ -1470,6 +1473,25 @@ begin
   Synchronize(DoOpDone);
 end;
 
+procedure TSFTPWorkerThread.CmdCreateFile(const ARemotePath: string);
+var
+  PathA: AnsiString;
+  Handle: PLIBSSH2_SFTP_HANDLE;
+begin
+  PathA := ToUtf8Ansi(ARemotePath);
+  Handle := PLIBSSH2_SFTP_HANDLE(WaitPointer(
+    function: Pointer
+    begin
+      Result := ssh2_sftp_open_ex(FSFTP, PAnsiChar(PathA), Length(PathA),
+        LIBSSH2_FXF_WRITE or LIBSSH2_FXF_CREAT or LIBSSH2_FXF_EXCL,
+        $1A4, LIBSSH2_SFTP_OPENFILE);
+    end));
+  if Handle = nil then
+    raise Exception.Create('Create remote file failed: ' + GetSFTPError);
+  ssh2_sftp_close_handle(Handle);
+  Synchronize(DoOpDone);
+end;
+
 procedure TSFTPWorkerThread.CmdRename(const AOldPath, ANewPath: string);
 var
   OldA, NewA: AnsiString;
@@ -1591,6 +1613,11 @@ end;
 procedure TnbSFTPClient.MakeDir(const ARemotePath: string);
 begin
   QueueCommand(sckMakeDir, ARemotePath);
+end;
+
+procedure TnbSFTPClient.CreateFile(const ARemotePath: string);
+begin
+  QueueCommand(sckCreateFile, ARemotePath);
 end;
 
 procedure TnbSFTPClient.Rename(const AOldPath, ANewPath: string);

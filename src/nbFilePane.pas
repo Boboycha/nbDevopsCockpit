@@ -104,12 +104,16 @@ type
     FOnOpenFile: TnbFilePaneOpenFileEvent;
     FOnConfirmDelete: TFunc<string, Boolean>;
     FOnPrompt: TnbFilePanePromptEvent;
+    FBtnCreateFile: TnbToolButton;
     FBtnMkdir:  TnbToolButton;
     FBtnRename: TnbToolButton;
     FBtnDelete: TnbToolButton;
+    FLangNewFileHint:    string;
     FLangNewFolderHint:  string;
     FLangRenameHint:     string;
     FLangDeleteHint:     string;
+    FLangNewFileTitle:   string;
+    FLangNewFileLabel:   string;
     FLangNewFolderTitle: string;
     FLangNewFolderLabel: string;
     FLangRenameTitle:    string;
@@ -166,6 +170,7 @@ type
     procedure UpdateRowSelection;
     procedure HandleUp(Sender: TObject);
     procedure HandleRefresh(Sender: TObject);
+    procedure HandleCreateFile(Sender: TObject);
     procedure HandleMkdir(Sender: TObject);
     procedure HandleRename(Sender: TObject);
     procedure HandleDelete(Sender: TObject);
@@ -515,15 +520,19 @@ begin
 
   AddButton(#$2191, HandleUp,      'Up');
   AddButton('R',    HandleRefresh, 'Refresh');
+  FLangNewFileHint    := 'New file';
   FLangNewFolderHint  := 'New folder';
   FLangRenameHint     := 'Rename';
   FLangDeleteHint     := 'Delete';
+  FLangNewFileTitle   := 'New file';
+  FLangNewFileLabel   := 'Name';
   FLangNewFolderTitle := 'New folder';
   FLangNewFolderLabel := 'Name';
   FLangRenameTitle    := 'Rename';
   FLangRenameLabel    := 'New name';
   FLangDeleteSingle   := 'Delete "%s"?';
   FLangDeleteMany     := 'Delete %d item(s)?';
+  FBtnCreateFile := AddButton('F', HandleCreateFile, FLangNewFileHint);
   FBtnMkdir  := AddButton('+', HandleMkdir,  FLangNewFolderHint);
   FBtnRename := AddButton('N', HandleRename, FLangRenameHint);
   FBtnDelete := AddButton('X', HandleDelete, FLangDeleteHint);
@@ -1395,6 +1404,19 @@ end;
 procedure TnbFilePane.HandleRefresh(Sender: TObject);
 begin
   Refresh;
+end;
+
+procedure TnbFilePane.HandleCreateFile(Sender: TObject);
+var
+  Values: array of string;
+begin
+  if FSource = nil then Exit;
+  SetLength(Values, 1);
+  Values[0] := '';
+  if Assigned(FOnPrompt) and
+    FOnPrompt(FLangNewFileTitle, FLangNewFileLabel, Values[0])
+    and (Trim(Values[0]) <> '') then
+    FSource.CreateFile(FSource.Combine(FPath, Trim(Values[0])));
 end;
 
 procedure TnbFilePane.HandleMkdir(Sender: TObject);

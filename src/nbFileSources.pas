@@ -26,6 +26,7 @@ type
     function ParentDir(const APath: string): string;
     function Combine(const ADir, AName: string): string;
     procedure MakeDir(const APath: string);
+    procedure CreateFile(const APath: string);
     procedure Rename(const AOldPath, ANewPath: string);
     procedure Delete(const APath: string; AIsDir: Boolean);
 
@@ -54,6 +55,7 @@ type
     function ParentDir(const APath: string): string; virtual; abstract;
     function Combine(const ADir, AName: string): string; virtual; abstract;
     procedure MakeDir(const APath: string); virtual; abstract;
+    procedure CreateFile(const APath: string); virtual; abstract;
     procedure Rename(const AOldPath, ANewPath: string); virtual; abstract;
     procedure Delete(const APath: string; AIsDir: Boolean); virtual; abstract;
 
@@ -71,6 +73,7 @@ type
     function ParentDir(const APath: string): string; override;
     function Combine(const ADir, AName: string): string; override;
     procedure MakeDir(const APath: string); override;
+    procedure CreateFile(const APath: string); override;
     procedure Rename(const AOldPath, ANewPath: string); override;
     procedure Delete(const APath: string; AIsDir: Boolean); override;
   end;
@@ -89,6 +92,7 @@ type
     function ParentDir(const APath: string): string; override;
     function Combine(const ADir, AName: string): string; override;
     procedure MakeDir(const APath: string); override;
+    procedure CreateFile(const APath: string); override;
     procedure Rename(const AOldPath, ANewPath: string); override;
     procedure Delete(const APath: string; AIsDir: Boolean); override;
   end;
@@ -239,6 +243,21 @@ begin
   end;
 end;
 
+procedure TnbLocalFileSource.CreateFile(const APath: string);
+var
+  Stream: TFileStream;
+begin
+  try
+    if TFile.Exists(APath) or TDirectory.Exists(APath) then
+      raise Exception.CreateFmt('File already exists: %s', [APath]);
+    Stream := TFileStream.Create(APath, fmCreate);
+    Stream.Free;
+    DoChanged;
+  except
+    on E: Exception do DoError(E.Message);
+  end;
+end;
+
 procedure TnbLocalFileSource.Rename(const AOldPath, ANewPath: string);
 begin
   try
@@ -340,6 +359,11 @@ end;
 procedure TnbSFTPFileSource.MakeDir(const APath: string);
 begin
   FClient.MakeDir(APath);
+end;
+
+procedure TnbSFTPFileSource.CreateFile(const APath: string);
+begin
+  FClient.CreateFile(APath);
 end;
 
 procedure TnbSFTPFileSource.Rename(const AOldPath, ANewPath: string);
