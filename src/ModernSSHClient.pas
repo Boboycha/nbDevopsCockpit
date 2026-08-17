@@ -56,6 +56,7 @@ type
     FUtf8Tail: TBytes;
     FCurrentFingerprint: string;
     FHostKeyAccepted: Boolean;
+    FProbeRequested: Integer;
     procedure DoStatusChange;
     procedure DoSyncRead;
     procedure DoVerifyHostKey;
@@ -70,6 +71,7 @@ type
     constructor Create(AOwner: TnbSSHClient);
     destructor Destroy; override;
     procedure EnqueueCommand(const Cmd: TSSHCommand);
+    procedure RequestProbe;
   end;
 
   TnbSSHClient = class(TComponent)
@@ -104,6 +106,7 @@ type
 
     procedure Connect;
     procedure Disconnect;
+    procedure ProbeConnection;
 
     (* Отправка строки в SSH-канал. Кодируется в UTF-8 внутри. *)
     procedure WriteString(const S: string);
@@ -255,6 +258,11 @@ begin
   end;
 end;
 
+procedure TSSHWorkerThread.RequestProbe;
+begin
+  TInterlocked.Exchange(FProbeRequested, 1);
+end;
+
 procedure TSSHWorkerThread.DoStatusChange;
 begin
   FOwner.SetStatus(FCurrentStatus);
@@ -362,6 +370,8 @@ var
   Bytes: TBytes;
   TotalSent: NativeInt;
   WriteLen: NativeInt;
+  WriteStartTick: UInt64;
+  WriteTimeoutMs: Cardinal;
 begin
   FCommandLock.Enter;
   try
@@ -382,12 +392,23 @@ begin
           if Cmd.StrPayload = '' then Continue;
           Bytes := TEncoding.UTF8.GetBytes(Cmd.StrPayload);
           TotalSent := 0;
+          WriteStartTick := TThread.GetTickCount64;
+          if FOwner.ConnectionTimeoutMs > 0 then
+            WriteTimeoutMs := FOwner.ConnectionTimeoutMs
+          else
+            WriteTimeoutMs := 10000;
           while (TotalSent < Length(Bytes)) and not Terminated do
           begin
             WriteLen := ssh2_channel_write_ex(FChannel, 0,
               PAnsiChar(@Bytes[0]) + TotalSent, Length(Bytes) - TotalSent);
             if WriteLen = LIBSSH2_ERROR_EAGAIN then
             begin
+              if TThread.GetTickCount64 - WriteStartTick >= WriteTimeoutMs then
+              begin
+                FOwner.FErrorMessage := 'SSH write timed out';
+                Terminate;
+                Exit;
+              end;
               Sleep(5);
               Continue;
             end;
@@ -506,6 +527,8 @@ var
   WakeCmd: TSSHCommand;
   KeepAliveRC, KeepAliveNext: Integer;
   NextKeepAliveTick: UInt64;
+  KeepAliveBlockedSince: UInt64;
+  KeepAliveTimeoutMs: Cardinal;
 begin
   FCurrentStatus := ssConnecting;
   Synchronize(DoStatusChange);
@@ -672,11 +695,17 @@ begin
 
     if Assigned(ssh2_keepalive_config) and Assigned(ssh2_keepalive_send) then
     begin
-      ssh2_keepalive_config(FSession, 1, 30);
-      NextKeepAliveTick := TThread.GetTickCount64 + 30000;
+      ssh2_keepalive_config(FSession, 1, 10);
+      NextKeepAliveTick := TThread.GetTickCount64 + 10000;
     end
     else
       NextKeepAliveTick := High(UInt64);
+
+    KeepAliveBlockedSince := 0;
+    if FOwner.ConnectionTimeoutMs > 0 then
+      KeepAliveTimeoutMs := FOwner.ConnectionTimeoutMs
+    else
+      KeepAliveTimeoutMs := 10000;
 
     FCurrentStatus := ssConnected;
     Synchronize(DoStatusChange);
@@ -691,6 +720,8 @@ begin
 
     while not Terminated do
     begin
+      if TInterlocked.Exchange(FProbeRequested, 0) <> 0 then
+        NextKeepAliveTick := 0;
       ReadAnything := False;
       repeat
         ReadLen := ssh2_channel_read_ex(FChannel, 0, PAnsiChar(@Buf[0]), Length(Buf));
@@ -721,6 +752,19 @@ begin
           FOwner.FErrorMessage := 'SSH keepalive failed: ' + GetLibLastError;
           Break;
         end;
+        if KeepAliveRC = LIBSSH2_ERROR_EAGAIN then
+        begin
+          if KeepAliveBlockedSince = 0 then
+            KeepAliveBlockedSince := TThread.GetTickCount64
+          else if TThread.GetTickCount64 - KeepAliveBlockedSince >=
+            KeepAliveTimeoutMs then
+          begin
+            FOwner.FErrorMessage := 'SSH keepalive timed out';
+            Break;
+          end;
+        end
+        else
+          KeepAliveBlockedSince := 0;
         if KeepAliveNext <= 0 then
           KeepAliveNext := 1;
         NextKeepAliveTick := TThread.GetTickCount64 + UInt64(KeepAliveNext) * 1000;
@@ -835,6 +879,12 @@ begin
     FWorker.WaitFor;
     FreeAndNil(FWorker);
   end;
+end;
+
+procedure TnbSSHClient.ProbeConnection;
+begin
+  if Assigned(FWorker) and (FStatus = ssConnected) then
+    FWorker.RequestProbe;
 end;
 
 procedure TnbSSHClient.WriteString(const S: string);

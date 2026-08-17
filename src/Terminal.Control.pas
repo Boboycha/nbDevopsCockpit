@@ -58,6 +58,7 @@ type
     FScrollBarDragOffset: Single;
     FActiveMouseButton: Integer;
     FSSHBridge: TTerminalSSHBridge;
+    FShowSSHErrors: Boolean;
     FLastHostCols: Integer;
     FLastHostRows: Integer;
    FDeferHostResize: Boolean;
@@ -216,6 +217,8 @@ protected
     property FontItalic: Boolean read GetFontItalic write SetFontItalic;
    property Theme: TTerminalTheme read GetTheme write SetTheme;
     property SSHClient: TnbSSHClient read GetSSHClient write SetSSHClient;
+    property ShowSSHErrors: Boolean read FShowSSHErrors
+      write FShowSSHErrors default True;
     property EnableSyntaxHighlighting: Boolean read FEnableSyntaxHighlighting
       write FEnableSyntaxHighlighting default False;
     property SemanticHighlighting: Boolean read GetSemanticHighlighting
@@ -292,6 +295,8 @@ begin
   FLastHostCols := 0;
   FLastHostRows := 0;
  FDeferHostResize := False;
+
+  FShowSSHErrors := True;
 
   FSSHBridge := TTerminalSSHBridge.Create(Self);
   FSSHBridge.OnConnected := HandleSSHConnected;
@@ -1444,7 +1449,7 @@ procedure TnbTerminalControl.HandleSSHError(Sender: TObject;
   const ErrorMessage: string);
 begin
   (* Пишем сообщение об ошибке прямо в терминал, красным *)
-  if ErrorMessage <> '' then
+  if FShowSSHErrors and (ErrorMessage <> '') then
     WriteText(#13#10 + #27'[1;31m' +
       'SSH error: ' + ErrorMessage +
       #27'[0m'#13#10);
