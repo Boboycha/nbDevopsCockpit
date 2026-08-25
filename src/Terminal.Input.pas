@@ -71,22 +71,24 @@ class function TTerminalInput.TranslateKey(Key: Word; KeyChar: WideChar;
     if not (ssCtrl in Shift) then
       Exit;
 
-    if (Key >= Ord('A')) and (Key <= Ord('Z')) then
-      C := WideChar(Key - Ord('A') + 1)
+    case KeyChar of
+      ' ', '@': C := #0;
+      'a'..'z': C := WideChar(Ord(KeyChar) - Ord('a') + 1);
+      'A'..'Z': C := WideChar(Ord(KeyChar) - Ord('A') + 1);
+      '[': C := #27;
+      '\': C := #28;
+      ']': C := #29;
+      '^': C := #30;
+      '_': C := #31;
+      '?': C := #127;
     else
-      case KeyChar of
-        ' ', '@': C := #0;
-        'a'..'z': C := WideChar(Ord(KeyChar) - Ord('a') + 1);
-        'A'..'Z': C := WideChar(Ord(KeyChar) - Ord('A') + 1);
-        '[': C := #27;
-        '\': C := #28;
-        ']': C := #29;
-        '^': C := #30;
-        '_': C := #31;
-        '?': C := #127;
+      if (KeyChar <> #0) and (Ord(KeyChar) >= 32) then
+        Exit;
+      if (Key >= Ord('A')) and (Key <= Ord('Z')) then
+        C := WideChar(Key - Ord('A') + 1)
       else
         Exit;
-      end;
+    end;
     Result := string(C);
   end;
 
@@ -103,7 +105,10 @@ begin
 
   if (ssAlt in Shift) and (KeyChar <> #0) then
   begin
-    Result := #27 + string(KeyChar);
+    if (ssCtrl in Shift) and (Ord(KeyChar) >= 32) then
+      Result := string(KeyChar)
+    else
+      Result := #27 + string(KeyChar);
     Exit;
   end;
 

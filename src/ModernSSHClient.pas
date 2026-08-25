@@ -560,7 +560,10 @@ begin
 
   try
     if FOwner.ConnectionTimeoutMs > 0 then
+    begin
       FSocket.ConnectionTimeout := FOwner.ConnectionTimeoutMs;
+      FSocket.SetTimeout(FOwner.ConnectionTimeoutMs);
+    end;
     FSocket.Connect(FOwner.Host, FOwner.Port);
     if FSocket.LastError <> 0 then
     begin
@@ -581,6 +584,9 @@ begin
       Synchronize(DoStatusChange);
       Exit;
     end;
+
+    if FOwner.ConnectionTimeoutMs > 0 then
+      ssh2_session_set_timeout(FSession, FOwner.ConnectionTimeoutMs);
 
     RC := ssh2_session_handshake(FSession, FSocket.Socket);
     if RC <> 0 then

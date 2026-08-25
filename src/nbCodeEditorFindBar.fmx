@@ -1,0 +1,166 @@
+object nbCodeEditorFindBar: TnbCodeEditorFindBar
+  Size.Width = 1021.000000000000000000
+  Size.Height = 100.000000000000000000
+  Size.PlatformDefault = False
+  object BackgroundRect: TRectangle
+    Align = Contents
+    Fill.Color = xFF143D45
+    Size.Width = 1021.000000000000000000
+    Size.Height = 100.000000000000000000
+    Size.PlatformDefault = False
+    Stroke.Color = xFF2B6973
+    object StatusLabel: TLabel
+      Align = Bottom
+      StyledSettings = [Family, Size, Style]
+      Margins.Left = 8.000000000000000000
+      Position.X = 8.000000000000000000
+      Position.Y = 72.000000000000000000
+      Size.Width = 1013.000000000000000000
+      Size.Height = 28.000000000000000000
+      Size.PlatformDefault = False
+      TextSettings.FontColor = xFFE4EDF0
+      TabOrder = 2
+    end
+    object FindRow: TLayout
+      Align = Top
+      Margins.Top = 2.000000000000000000
+      Margins.Right = 4.000000000000000000
+      Position.Y = 2.000000000000000000
+      Size.Width = 1017.000000000000000000
+      Size.Height = 34.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 0
+      object CloseButton: TButton
+        Align = Right
+        Hint = 'Close'
+        Margins.Left = 4.000000000000000000
+        Margins.Top = 3.000000000000000000
+        Margins.Bottom = 3.000000000000000000
+        Position.X = 985.000000000000000000
+        Position.Y = 3.000000000000000000
+        Size.Width = 32.000000000000000000
+        Size.Height = 28.000000000000000000
+        Size.PlatformDefault = False
+        Text = 'x'
+        TextSettings.Trimming = None
+        ParentShowHint = False
+        ShowHint = True
+      end
+      object NextButton: TButton
+        Align = Right
+        Hint = 'Next'
+        Margins.Left = 4.000000000000000000
+        Margins.Top = 3.000000000000000000
+        Margins.Bottom = 3.000000000000000000
+        Position.X = 949.000000000000000000
+        Position.Y = 3.000000000000000000
+        Size.Width = 32.000000000000000000
+        Size.Height = 28.000000000000000000
+        Size.PlatformDefault = False
+        Text = '>'
+        TextSettings.Trimming = None
+        ParentShowHint = False
+        ShowHint = True
+      end
+      object PrevButton: TButton
+        Align = Right
+        Hint = 'Previous'
+        Margins.Left = 4.000000000000000000
+        Margins.Top = 3.000000000000000000
+        Margins.Bottom = 3.000000000000000000
+        Position.X = 913.000000000000000000
+        Position.Y = 3.000000000000000000
+        Size.Width = 32.000000000000000000
+        Size.Height = 28.000000000000000000
+        Size.PlatformDefault = False
+        Text = '<'
+        TextSettings.Trimming = None
+        ParentShowHint = False
+        ShowHint = True
+      end
+      object WrapCheck: TCheckBox
+        Align = Right
+        IsChecked = True
+        Margins.Left = 8.000000000000000000
+        Margins.Top = 3.000000000000000000
+        Margins.Bottom = 3.000000000000000000
+        Position.X = 831.000000000000000000
+        Position.Y = 3.000000000000000000
+        Size.Width = 78.000000000000000000
+        Size.Height = 28.000000000000000000
+        Size.PlatformDefault = False
+        Text = 'Wrap'
+      end
+      object CaseCheck: TCheckBox
+        Align = Right
+        Margins.Left = 8.000000000000000000
+        Margins.Top = 3.000000000000000000
+        Margins.Bottom = 3.000000000000000000
+        Position.X = 751.000000000000000000
+        Position.Y = 3.000000000000000000
+        Size.Width = 72.000000000000000000
+        Size.Height = 28.000000000000000000
+        Size.PlatformDefault = False
+        Text = 'Case'
+      end
+      object FindEdit: TEdit
+        Touch.InteractiveGestures = [LongTap, DoubleTap]
+        Align = Client
+        Margins.Left = 6.000000000000000000
+        Margins.Top = 3.000000000000000000
+        Margins.Right = 4.000000000000000000
+        Margins.Bottom = 3.000000000000000000
+        Size.Width = 733.000000000000000000
+        Size.Height = 28.000000000000000000
+        Size.PlatformDefault = False
+        TextPrompt = 'Find'
+      end
+    end
+    object ReplaceRow: TLayout
+      Align = Client
+      Margins.Right = 4.000000000000000000
+      Size.Width = 1017.000000000000000000
+      Size.Height = 36.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 1
+      object ReplaceButton: TButton
+        Align = Right
+        Margins.Left = 4.000000000000000000
+        Margins.Top = 3.000000000000000000
+        Margins.Bottom = 3.000000000000000000
+        Position.X = 747.000000000000000000
+        Position.Y = 3.000000000000000000
+        Size.Width = 138.000000000000000000
+        Size.Height = 30.000000000000000000
+        Size.PlatformDefault = False
+        Text = 'Replace'
+        TextSettings.Trimming = None
+      end
+      object ReplaceAllButton: TButton
+        Align = Right
+        Margins.Left = 8.000000000000000000
+        Margins.Top = 3.000000000000000000
+        Margins.Bottom = 3.000000000000000000
+        Position.X = 893.000000000000000000
+        Position.Y = 3.000000000000000000
+        Size.Width = 124.000000000000000000
+        Size.Height = 30.000000000000000000
+        Size.PlatformDefault = False
+        Text = 'All'
+        TextSettings.Trimming = None
+      end
+      object ReplaceEdit: TEdit
+        Touch.InteractiveGestures = [LongTap, DoubleTap]
+        Align = Client
+        Margins.Left = 6.000000000000000000
+        Margins.Top = 3.000000000000000000
+        Margins.Right = 4.000000000000000000
+        Margins.Bottom = 3.000000000000000000
+        Size.Width = 733.000000000000000000
+        Size.Height = 30.000000000000000000
+        Size.PlatformDefault = False
+        TextPrompt = 'Replace'
+      end
+    end
+  end
+end

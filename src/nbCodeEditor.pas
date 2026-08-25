@@ -8,6 +8,8 @@ uses
   nbTextDocument;
 
 type
+  TnbCodeEditorFindOptions = set of (cfoCaseSensitive, cfoWrapAround);
+
   TnbCodeEditorPalette = record
     Background: TAlphaColor;
     Text: TAlphaColor;
@@ -63,6 +65,14 @@ type
     procedure ApplyPalette(const APalette: TnbCodeEditorPalette);
     procedure RefreshDocument;
     procedure EnsureCaretVisible;
+    function FindNext(const ASearchText: string;
+      AOptions: TnbCodeEditorFindOptions): Boolean;
+    function FindPrevious(const ASearchText: string;
+      AOptions: TnbCodeEditorFindOptions): Boolean;
+    function ReplaceCurrent(const ASearchText, AReplaceText: string;
+      AOptions: TnbCodeEditorFindOptions): Boolean;
+    function ReplaceAll(const ASearchText, AReplaceText: string;
+      AOptions: TnbCodeEditorFindOptions): Integer;
     property Palette: TnbCodeEditorPalette read FPalette;
   published
     property Document: TnbTextDocument read FDocument write SetDocument;
@@ -74,9 +84,9 @@ type
 implementation
 
 uses
-  FMX.Objects, FMX.RichEdit.Style, Syntax.Code, Syntax.Code.Pascal, Syntax.Code.JSON,
-  Syntax.Code.SQL, Syntax.Code.Python, Syntax.Code.HTML, Syntax.Code.CSS,
-  Syntax.Code.MarkDown, Syntax.Code.Shell;
+  System.StrUtils, FMX.Objects, FMX.RichEdit.Style, Syntax.Code,
+  Syntax.Code.Pascal, Syntax.Code.JSON, Syntax.Code.SQL, Syntax.Code.Python,
+  Syntax.Code.HTML, Syntax.Code.CSS, Syntax.Code.MarkDown, Syntax.Code.Shell;
 
 class function TnbCodeEditorPalette.Default: TnbCodeEditorPalette;
 begin
@@ -377,7 +387,182 @@ begin
   Model.Caret.Show;
   Repaint;
 end;
+function SameSearchText(const ALeft, ARight: string;
+  ACaseSensitive: Boolean): Boolean;
+begin
+  if ACaseSensitive then
+    Result := ALeft = ARight
+  else
+    Result := SameText(ALeft, ARight);
+end;
 
+function TnbCodeEditor.FindNext(const ASearchText: string;
+  AOptions: TnbCodeEditorFindOptions): Boolean;
+var
+  Source, Needle: string;
+  StartPos, FoundPos: Integer;
+begin
+  Result := False;
+  if ASearchText = '' then
+    Exit;
+
+  Source := Text;
+  Needle := ASearchText;
+  if not (cfoCaseSensitive in AOptions) then
+  begin
+    Source := LowerCase(Source);
+    Needle := LowerCase(Needle);
+  end;
+
+  StartPos := SelStart + SelLength + 1;
+  if StartPos < 1 then
+    StartPos := 1;
+  if StartPos > Length(Source) then
+    StartPos := Length(Source) + 1;
+
+  FoundPos := PosEx(Needle, Source, StartPos);
+  if (FoundPos = 0) and (cfoWrapAround in AOptions) then
+    FoundPos := PosEx(Needle, Source, 1);
+
+  if FoundPos > 0 then
+  begin
+    SelStart := FoundPos - 1;
+    SelLength := Length(ASearchText);
+    SetFocus;
+    EnsureCaretVisible;
+    Result := True;
+  end;
+end;
+
+function TnbCodeEditor.FindPrevious(const ASearchText: string;
+  AOptions: TnbCodeEditorFindOptions): Boolean;
+var
+  Source, Needle: string;
+  SearchLimit, ScanPos, FoundPos, NextPos: Integer;
+begin
+  Result := False;
+  if ASearchText = '' then
+    Exit;
+
+  Source := Text;
+  Needle := ASearchText;
+  if not (cfoCaseSensitive in AOptions) then
+  begin
+    Source := LowerCase(Source);
+    Needle := LowerCase(Needle);
+  end;
+
+  SearchLimit := SelStart;
+  FoundPos := 0;
+  ScanPos := 1;
+  while ScanPos <= SearchLimit do
+  begin
+    NextPos := PosEx(Needle, Source, ScanPos);
+    if (NextPos = 0) or (NextPos > SearchLimit) then
+      Break;
+    FoundPos := NextPos;
+    ScanPos := NextPos + 1;
+  end;
+
+  if (FoundPos = 0) and (cfoWrapAround in AOptions) then
+  begin
+    ScanPos := 1;
+    while ScanPos <= Length(Source) do
+    begin
+      NextPos := PosEx(Needle, Source, ScanPos);
+      if NextPos = 0 then
+        Break;
+      FoundPos := NextPos;
+      ScanPos := NextPos + 1;
+    end;
+  end;
+
+  if FoundPos > 0 then
+  begin
+    SelStart := FoundPos - 1;
+    SelLength := Length(ASearchText);
+    SetFocus;
+    EnsureCaretVisible;
+    Result := True;
+  end;
+end;
+
+function TnbCodeEditor.ReplaceCurrent(const ASearchText,
+  AReplaceText: string; AOptions: TnbCodeEditorFindOptions): Boolean;
+var
+  Source, NewText: string;
+  ReplaceStart: Integer;
+begin
+  Result := False;
+  if (ASearchText = '') or ReadOnly then
+    Exit;
+
+  if (SelLength <> Length(ASearchText)) or
+    not SameSearchText(SelText, ASearchText, cfoCaseSensitive in AOptions) then
+    if not FindNext(ASearchText, AOptions) then
+      Exit;
+
+  Source := Text;
+  ReplaceStart := SelStart + 1;
+  NewText := Copy(Source, 1, ReplaceStart - 1) + AReplaceText +
+    Copy(Source, ReplaceStart + SelLength, MaxInt);
+  if FDocument <> nil then
+    FDocument.Text := NewText
+  else
+    Text := NewText;
+  SelStart := ReplaceStart - 1 + Length(AReplaceText);
+  SelLength := 0;
+  Result := True;
+  FindNext(ASearchText, AOptions);
+end;
+
+function TnbCodeEditor.ReplaceAll(const ASearchText, AReplaceText: string;
+  AOptions: TnbCodeEditorFindOptions): Integer;
+var
+  Source, ScanSource, Needle, Replacement, NewText: string;
+  SearchPos, FoundPos, LastCopyPos: Integer;
+begin
+  Result := 0;
+  if (ASearchText = '') or ReadOnly then
+    Exit;
+
+  Source := Text;
+  ScanSource := Source;
+  Needle := ASearchText;
+  if not (cfoCaseSensitive in AOptions) then
+  begin
+    ScanSource := LowerCase(ScanSource);
+    Needle := LowerCase(Needle);
+  end;
+
+  Replacement := AReplaceText;
+  NewText := '';
+  SearchPos := 1;
+  LastCopyPos := 1;
+  while SearchPos <= Length(ScanSource) do
+  begin
+    FoundPos := PosEx(Needle, ScanSource, SearchPos);
+    if FoundPos = 0 then
+      Break;
+    NewText := NewText + Copy(Source, LastCopyPos, FoundPos - LastCopyPos) +
+      Replacement;
+    Inc(Result);
+    SearchPos := FoundPos + Length(ASearchText);
+    LastCopyPos := SearchPos;
+  end;
+
+  if Result = 0 then
+    Exit;
+
+  NewText := NewText + Copy(Source, LastCopyPos, MaxInt);
+  if FDocument <> nil then
+    FDocument.Text := NewText
+  else
+    Text := NewText;
+  SelStart := 0;
+  SelLength := 0;
+  FindNext(ASearchText, AOptions);
+end;
 initialization
   RegisterFmxClasses([TnbCodeEditor]);
 

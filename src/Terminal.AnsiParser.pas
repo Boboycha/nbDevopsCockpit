@@ -413,7 +413,25 @@ begin
               FState := psCharsetG1
             else if CharInSet(Ch, ['*', '+', '-', '.', '/']) then
               FState := psNormal
-            else if CharInSet(Ch, ['=', '>', '7', '8', 'E', 'D', 'H', 'c']) then
+            else if Ch = '7' then
+            begin
+              Cmd.Command := apcSaveCursorPosition;
+              Cmd.Char := '';
+              Cmd.Attributes := FCurrentAttributes;
+              SetLength(Cmd.Params, 0);
+              CmdList.Add(Cmd);
+              FState := psNormal;
+            end
+            else if Ch = '8' then
+            begin
+              Cmd.Command := apcRestoreCursorPosition;
+              Cmd.Char := '';
+              Cmd.Attributes := FCurrentAttributes;
+              SetLength(Cmd.Params, 0);
+              CmdList.Add(Cmd);
+              FState := psNormal;
+            end
+            else if CharInSet(Ch, ['=', '>', 'E', 'D', 'H', 'c']) then
               FState := psNormal
             else if Ch = 'M' then
             begin

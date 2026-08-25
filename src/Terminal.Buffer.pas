@@ -1,4 +1,4 @@
-unit Terminal.Buffer;
+﻿unit Terminal.Buffer;
 
 interface
 
@@ -39,6 +39,10 @@ type
     FVisualScrollDelta: Integer;
     FViewportOffset: Integer;
     FMouseModes: TMouseTrackingModes;
+    FInsertMode: Boolean;
+    FOriginMode: Boolean;
+    FAutoWrapMode: Boolean;
+    FPendingWrap: Boolean;
     FLastMouseCol: Integer;
     FLastMouseRow: Integer;
     FSelStart: TPoint;
@@ -72,6 +76,7 @@ type
     function GetLineByAbsoluteIndex(Index: Integer): TTerminalLine;
     procedure SetSelectionRangeDirty(StartAbsY, EndAbsY: Integer);
     procedure ReflowMainBuffer(NewWidth, NewHeight: Integer);
+    procedure ClearPendingWrap;
     
     // Очистка "хвоста" wide-символа если перезаписываем
     procedure ClearWideCharTail(Line: TTerminalLine; X: Integer);
@@ -124,6 +129,12 @@ type
     property Scrollback: TList<TTerminalLine> read FScrollback;
     property MaxScrollback: Integer read FMaxScrollback write FMaxScrollback;
     property AppCursorKeys: Boolean read FAppCursorKeys;
+    property ScrollTop: Integer read FScrollTop;
+    property ScrollBottom: Integer read FScrollBottom;
+    property InsertMode: Boolean read FInsertMode;
+    property OriginMode: Boolean read FOriginMode;
+    property AutoWrapMode: Boolean read FAutoWrapMode;
+    property PendingWrap: Boolean read FPendingWrap;
     property MouseModes: TMouseTrackingModes read FMouseModes;
     property LastMouseCol: Integer read FLastMouseCol write FLastMouseCol;
     property LastMouseRow: Integer read FLastMouseRow write FLastMouseRow;
@@ -161,6 +172,10 @@ begin
   FVisualScrollDelta := 0;
   FViewportOffset := 0;
   FMouseModes := [];
+  FInsertMode := False;
+  FOriginMode := False;
+  FAutoWrapMode := True;
+  FPendingWrap := False;
   FLastMouseCol := 1;
   FLastMouseRow := 1;
   FHasSelection := False;
@@ -395,6 +410,11 @@ begin
   for I := Top to Top + Count - 1 do
     CurrentLines[I] := CreateBlankLine;
   SetRangeDirty(Top, Bottom);
+end;
+
+procedure TTerminalBuffer.ClearPendingWrap;
+begin
+  FPendingWrap := False;
 end;
 
 procedure TTerminalBuffer.ScrollUp(Lines: Integer);
@@ -633,24 +653,28 @@ begin
         Exit;
       #10: // Line Feed
         begin
+          ClearPendingWrap;
           FCarriageReturnPending := False;
           AdvanceToNextLine(False, False);
           Exit;
         end;
       #13: // Carriage Return
         begin
+          ClearPendingWrap;
           FCursor.X := 0;
           FCarriageReturnPending := True;
           Exit;
         end;
       #8:  // Backspace
         begin
+          ClearPendingWrap;
           if FCursor.X > 0 then
             Dec(FCursor.X);
           Exit;
         end;
       #9:  // Tab
         begin
+          ClearPendingWrap;
           FCursor.X := ((FCursor.X div 8) + 1) * 8;
           if FCursor.X >= FWidth then
             AdvanceToNextLine(False, True);
@@ -681,6 +705,12 @@ begin
   CharWidth := GetCharDisplayWidth(Ch);
   if CharWidth = 0 then
     Exit;
+
+  if FPendingWrap then
+  begin
+    AdvanceToNextLine(True, True);
+    ClearPendingWrap;
+  end;
 
   // Автоперенос строки
   if FCursor.X >= FWidth then
@@ -721,6 +751,12 @@ begin
     Exit;
   end;
 
+  if FInsertMode then
+  begin
+    InsertChar(FCursor.X, FCursor.Y, CharWidth);
+    Line := CurrentLines[FCursor.Y];
+  end;
+
   // Очищаем старые wide-символы если перезаписываем
   ClearWideCharHead(Line, FCursor.X);
   ClearWideCharTail(Line, FCursor.X);
@@ -747,7 +783,18 @@ begin
   else
     FLastChar := Ch;
     
-  Inc(FCursor.X, CharWidth);
+  if FAutoWrapMode and (FCursor.X + CharWidth >= FWidth) then
+  begin
+    FCursor.X := FWidth - 1;
+    FPendingWrap := True;
+  end
+  else
+  begin
+    Inc(FCursor.X, CharWidth);
+    if FCursor.X >= FWidth then
+      FCursor.X := FWidth - 1;
+    ClearPendingWrap;
+  end;
   SetDirty(FCursor.Y);
 end;
 
@@ -777,6 +824,7 @@ end;
 
 procedure TTerminalBuffer.MoveCursor(X, Y: Integer);
 begin
+  ClearPendingWrap;
   FCursor.X := EnsureRange(X, 0, FWidth - 1);
   FCursor.Y := EnsureRange(Y, 0, FHeight - 1);
 end;
@@ -1290,6 +1338,7 @@ begin
     
     apcCursorHorizontalAbs:
       begin
+        ClearPendingWrap;
         N := 1;
         if Length(Cmd.Params) > 0 then N := Cmd.Params[0];
         FCursor.X := EnsureRange(N - 1, 0, FWidth - 1);
@@ -1300,18 +1349,59 @@ begin
         N := 1; M := 1;
         if Length(Cmd.Params) > 0 then N := Cmd.Params[0];
         if Length(Cmd.Params) > 1 then M := Cmd.Params[1];
-        MoveCursor(M - 1, N - 1);
+        if FOriginMode then
+          MoveCursor(M - 1, EnsureRange(FScrollTop + N - 1, FScrollTop, FScrollBottom))
+        else
+          MoveCursor(M - 1, N - 1);
       end;
     
     apcVerticalPositionAbs:
       begin
+        ClearPendingWrap;
         N := 1;
         if Length(Cmd.Params) > 0 then N := Cmd.Params[0];
-        FCursor.Y := EnsureRange(N - 1, 0, FHeight - 1);
+        if FOriginMode then
+          FCursor.Y := EnsureRange(FScrollTop + N - 1, FScrollTop, FScrollBottom)
+        else
+          FCursor.Y := EnsureRange(N - 1, 0, FHeight - 1);
       end;
     
+    apcVerticalPositionRel:
+      begin
+        N := 1;
+        if Length(Cmd.Params) > 0 then N := Max(1, Cmd.Params[0]);
+        MoveCursorRelative(0, N);
+      end;
+    
+    apcHorizPositionAbs:
+      begin
+        ClearPendingWrap;
+        N := 1;
+        if Length(Cmd.Params) > 0 then N := Cmd.Params[0];
+        FCursor.X := EnsureRange(N - 1, 0, FWidth - 1);
+      end;
+    
+    apcHorizPositionRel:
+      begin
+        N := 1;
+        if Length(Cmd.Params) > 0 then N := Max(1, Cmd.Params[0]);
+        MoveCursorRelative(N, 0);
+      end;
+    
+        apcCursorBackwardTab:
+      begin
+        ClearPendingWrap;
+        N := 1;
+        if Length(Cmd.Params) > 0 then N := Max(1, Cmd.Params[0]);
+        while (N > 0) and (FCursor.X > 0) do
+        begin
+          FCursor.X := ((FCursor.X - 1) div 8) * 8;
+          Dec(N);
+        end;
+      end;
     apcEraseDisplay:
       begin
+        ClearPendingWrap;
         N := 0;
         if Length(Cmd.Params) > 0 then N := Cmd.Params[0];
         case N of
@@ -1341,6 +1431,7 @@ begin
     
     apcEraseLine:
       begin
+        ClearPendingWrap;
         N := 0;
         if Length(Cmd.Params) > 0 then N := Cmd.Params[0];
         ClearLine(FCursor.Y, N);
@@ -1348,6 +1439,7 @@ begin
     
     apcEraseChar:
       begin
+        ClearPendingWrap;
         N := 1;
         if Length(Cmd.Params) > 0 then N := Max(1, Cmd.Params[0]);
         EraseChar(FCursor.X, FCursor.Y, N);
@@ -1355,6 +1447,7 @@ begin
     
     apcScrollUp:
       begin
+        ClearPendingWrap;
         N := 1;
         if Length(Cmd.Params) > 0 then N := Max(1, Cmd.Params[0]);
         InternalScrollUp(FScrollTop, FScrollBottom, N);
@@ -1362,6 +1455,7 @@ begin
     
     apcScrollDown:
       begin
+        ClearPendingWrap;
         N := 1;
         if Length(Cmd.Params) > 0 then N := Max(1, Cmd.Params[0]);
         InternalScrollDown(FScrollTop, FScrollBottom, N);
@@ -1369,6 +1463,7 @@ begin
     
     apcInsertLine:
       begin
+        ClearPendingWrap;
         N := 1;
         if Length(Cmd.Params) > 0 then N := Max(1, Cmd.Params[0]);
         InsertLine(FCursor.Y, N);
@@ -1376,6 +1471,7 @@ begin
     
     apcDeleteLine:
       begin
+        ClearPendingWrap;
         N := 1;
         if Length(Cmd.Params) > 0 then N := Max(1, Cmd.Params[0]);
         DeleteLine(FCursor.Y, N);
@@ -1383,6 +1479,7 @@ begin
     
     apcInsertChar:
       begin
+        ClearPendingWrap;
         N := 1;
         if Length(Cmd.Params) > 0 then N := Max(1, Cmd.Params[0]);
         InsertChar(FCursor.X, FCursor.Y, N);
@@ -1390,6 +1487,7 @@ begin
     
     apcDeleteChar:
       begin
+        ClearPendingWrap;
         N := 1;
         if Length(Cmd.Params) > 0 then N := Max(1, Cmd.Params[0]);
         DeleteChar(FCursor.X, FCursor.Y, N);
@@ -1397,6 +1495,7 @@ begin
     
     apcRepeatChar:
       begin
+        ClearPendingWrap;
         N := 1;
         if Length(Cmd.Params) > 0 then N := Max(1, Cmd.Params[0]);
         for M := 1 to N do
@@ -1405,12 +1504,16 @@ begin
     
     apcSetScrollingRegion:
       begin
+        ClearPendingWrap;
         N := 1; M := FHeight;
         if Length(Cmd.Params) > 0 then N := Max(1, Cmd.Params[0]);
         if Length(Cmd.Params) > 1 then M := Min(Cmd.Params[1], FHeight);
-        FScrollTop := N - 1;
-        FScrollBottom := M - 1;
-        MoveCursor(0, 0);
+        FScrollTop := EnsureRange(N - 1, 0, FHeight - 1);
+        FScrollBottom := EnsureRange(M - 1, FScrollTop, FHeight - 1);
+        if FOriginMode then
+          MoveCursor(0, FScrollTop)
+        else
+          MoveCursor(0, 0);
       end;
     
     apcSoftTerminalReset:
@@ -1424,20 +1527,42 @@ begin
         FCursor.Shape := tcsBlock;
         FCursor.Blink := True;
         FAppCursorKeys := False;
+        FInsertMode := False;
+        FOriginMode := False;
+        FAutoWrapMode := True;
+        FPendingWrap := False;
         FMouseModes := [];
         FBracketedPaste := False;
       end;
     
     apcSaveCursorPosition:
       begin
+        ClearPendingWrap;
         FSavedCursor.X := FCursor.X;
         FSavedCursor.Y := FCursor.Y;
       end;
     
     apcRestoreCursorPosition:
       begin
+        ClearPendingWrap;
         FCursor.X := FSavedCursor.X;
         FCursor.Y := FSavedCursor.Y;
+      end;
+    
+    apcSetMode:
+      begin
+        for N in Cmd.Params do
+          case N of
+            4: FInsertMode := True;
+          end;
+      end;
+
+    apcResetMode:
+      begin
+        for N in Cmd.Params do
+          case N of
+            4: FInsertMode := False;
+          end;
       end;
     
     apcSetPrivateMode:
@@ -1445,6 +1570,8 @@ begin
         for N in Cmd.Params do
           case N of
             1: FAppCursorKeys := True;
+            6: begin FOriginMode := True; MoveCursor(0, FScrollTop); end;
+            7: begin FAutoWrapMode := True; ClearPendingWrap; end;
             25: FCursor.Visible := True;
             1000: Include(FMouseModes, mtm1000_Click);
             1002: Include(FMouseModes, mtm1002_Wheel);
@@ -1460,6 +1587,8 @@ begin
         for N in Cmd.Params do
           case N of
             1: FAppCursorKeys := False;
+            6: begin FOriginMode := False; MoveCursor(0, 0); end;
+            7: begin FAutoWrapMode := False; ClearPendingWrap; end;
             25: FCursor.Visible := False;
             1000: Exclude(FMouseModes, mtm1000_Click);
             1002: Exclude(FMouseModes, mtm1002_Wheel);
@@ -1530,7 +1659,11 @@ begin
         if Assigned(FOnResponse) then
           case N of
             5: FOnResponse(#27'[0n');  // статус терминала: OK
-            6: FOnResponse(Format(#27'[%d;%dR',
+            6: if FOriginMode then
+                 FOnResponse(Format(#27'[%d;%dR',
+                 [FCursor.Y - FScrollTop + 1, FCursor.X + 1]))
+               else
+                 FOnResponse(Format(#27'[%d;%dR',
                  [FCursor.Y + 1, FCursor.X + 1]));  // позиция курсора
           end;
       end;

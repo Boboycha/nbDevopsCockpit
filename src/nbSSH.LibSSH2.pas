@@ -27,6 +27,8 @@ type
     errmsg: PPAnsiChar; errmsg_len: PInteger; want_buf: Integer): Integer; cdecl;
   Tlibssh2_session_set_blocking = procedure(session: PLIBSSH2_SESSION;
     blocking: Integer); cdecl;
+  Tlibssh2_session_set_timeout = procedure(session: PLIBSSH2_SESSION;
+    timeout: LongInt); cdecl;
   Tlibssh2_keepalive_config = procedure(session: PLIBSSH2_SESSION;
     want_reply: Integer; interval: Cardinal); cdecl;
   Tlibssh2_keepalive_send = function(session: PLIBSSH2_SESSION;
@@ -93,6 +95,7 @@ var
   ssh2_session_disconnect_ex: Tlibssh2_session_disconnect_ex = nil;
   ssh2_session_last_error: Tlibssh2_session_last_error = nil;
   ssh2_session_set_blocking: Tlibssh2_session_set_blocking = nil;
+  ssh2_session_set_timeout: Tlibssh2_session_set_timeout = nil;
   ssh2_keepalive_config: Tlibssh2_keepalive_config = nil;
   ssh2_keepalive_send: Tlibssh2_keepalive_send = nil;
   ssh2_session_supported_algs: Tlibssh2_session_supported_algs = nil;
@@ -226,6 +229,7 @@ begin
   @ssh2_session_disconnect_ex         := ResolveProc('libssh2_session_disconnect_ex');
   @ssh2_session_last_error            := ResolveProc('libssh2_session_last_error');
   @ssh2_session_set_blocking          := ResolveProc('libssh2_session_set_blocking');
+  @ssh2_session_set_timeout           := ResolveProc('libssh2_session_set_timeout');
   @ssh2_keepalive_config              := ResolveProc('libssh2_keepalive_config', False);
   @ssh2_keepalive_send                := ResolveProc('libssh2_keepalive_send', False);
   @ssh2_session_supported_algs        := ResolveProc('libssh2_session_supported_algs');

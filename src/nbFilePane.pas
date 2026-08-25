@@ -86,6 +86,7 @@ type
     FButtons: TList<TnbToolButton>;
     FTransferButton: TnbToolButton;
     FToolbarLeadingInset: Single;
+    FToolbarVisible: Boolean;
     FStyleLookupPrefix: string;
     FColumnNameCaption: string;
     FColumnSizeCaption: string;
@@ -184,6 +185,7 @@ type
     function ScopedStyle(const ABaseStyle: string): string;
     procedure SetStyleLookupPrefix(const AValue: string);
     procedure SetToolbarLeadingInset(const AValue: Single);
+    procedure SetToolbarVisible(AValue: Boolean);
     procedure ApplyStyleLookups;
   protected
     procedure KeyDown(var Key: Word; var KeyChar: WideChar;
@@ -206,6 +208,13 @@ type
     procedure SetListFontSize(AFontSize: Single);
     procedure SetCaptions(const AName, ASize, AModified, AKind, AFolder,
       AFile, AParentFolder: string);
+    procedure CommandUp;
+    procedure CommandRefresh;
+    procedure CommandCreateFile;
+    procedure CommandNewFolder;
+    procedure CommandRename;
+    procedure CommandDelete;
+    procedure CommandTransfer;
     procedure SetActionStrings(
       const AHintNewFolder, AHintRename, AHintDelete: string;
       const ANewFolderTitle, ANewFolderLabel: string;
@@ -225,6 +234,7 @@ type
   published
     property ToolbarLeadingInset: Single read FToolbarLeadingInset
       write SetToolbarLeadingInset;
+    property ToolbarVisible: Boolean read FToolbarVisible write SetToolbarVisible;
     property OnTransfer: TNotifyEvent read FOnTransfer write FOnTransfer;
     property OnActivated: TNotifyEvent read FOnActivated write FOnActivated;
     property OnError: TnbFileErrorEvent read FOnError write FOnError;
@@ -330,6 +340,7 @@ begin
     FInstances := TList<TnbFilePane>.Create;
   FInstances.Add(Self);
   FButtons := TList<TnbToolButton>.Create;
+  FToolbarVisible := True;
   FSelectedIndices := TList<Integer>.Create;
   FSelectedIndex := -1;
   FSelectionAnchor := -1;
@@ -1476,6 +1487,41 @@ begin
     FOnTransfer(Self);
 end;
 
+procedure TnbFilePane.CommandUp;
+begin
+  HandleUp(Self);
+end;
+
+procedure TnbFilePane.CommandRefresh;
+begin
+  HandleRefresh(Self);
+end;
+
+procedure TnbFilePane.CommandCreateFile;
+begin
+  HandleCreateFile(Self);
+end;
+
+procedure TnbFilePane.CommandNewFolder;
+begin
+  HandleMkdir(Self);
+end;
+
+procedure TnbFilePane.CommandRename;
+begin
+  HandleRename(Self);
+end;
+
+procedure TnbFilePane.CommandDelete;
+begin
+  HandleDelete(Self);
+end;
+
+procedure TnbFilePane.CommandTransfer;
+begin
+  HandleTransfer(Self);
+end;
+
 procedure TnbFilePane.SetTransferButton(const AGlyph, AHint: string);
 begin
   if AGlyph = '' then
@@ -1525,6 +1571,21 @@ begin
   FToolbarLeadingInset := Max(0, AValue);
   if FToolBar <> nil then
     FToolBar.Padding.Left := FToolbarLeadingInset;
+end;
+
+procedure TnbFilePane.SetToolbarVisible(AValue: Boolean);
+begin
+  if FToolbarVisible = AValue then
+    Exit;
+  FToolbarVisible := AValue;
+  if FToolBar <> nil then
+  begin
+    FToolBar.Visible := AValue;
+    if AValue then
+      FToolBar.Height := 34
+    else
+      FToolBar.Height := 0;
+  end;
 end;
 
 function TnbFilePane.AddActionButton(const AGlyph, AHint: string;

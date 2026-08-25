@@ -5,7 +5,7 @@ interface
 uses
   System.SysUtils, System.Types, System.UITypes, System.Classes,
   System.Math, System.Generics.Collections, System.Diagnostics,
-  System.Character,
+  System.Character, System.IOUtils, System.TypInfo,
   FMX.Types, FMX.Controls, FMX.Graphics, FMX.Dialogs,
   FMX.Consts, FMX.Platform,
   Terminal.Types, Terminal.Buffer, Terminal.AnsiParser, Terminal.Renderer,
@@ -44,6 +44,8 @@ type
     // Для выделения
     FIsSelecting: Boolean;
     FSelectionStartAbs: TPoint;
+    FSelectionDragOrigin: TPointF;
+    FSelectionDragStarted: Boolean;
     FSelectionAutoScrollTimer: TTimer;
     FSelectionMousePos: TPointF;
     FSelectionAutoScrollDirection: Integer;
@@ -59,6 +61,8 @@ type
     FActiveMouseButton: Integer;
     FSSHBridge: TTerminalSSHBridge;
     FShowSSHErrors: Boolean;
+    FTraceEnabled: Boolean;
+    FTraceFileName: string;
     FLastHostCols: Integer;
     FLastHostRows: Integer;
    FDeferHostResize: Boolean;
@@ -70,6 +74,10 @@ type
     procedure HandleSSHReadData(Sender: TObject; const Data: string);
     procedure HandleOwnResize(Sender: TObject);
     procedure HandleBufferResponse(const S: string);
+    procedure TraceTerminalData(const Direction, Data: string);
+    procedure TraceKeyInput(Key: Word; KeyChar: WideChar; Shift: TShiftState;
+      const Data: string);
+    procedure TraceAnsiCommands(const Commands: TArray<TAnsiCommand>);
 
     procedure CursorTimerProc(Sender: TObject);
     procedure RenderTimerProc(Sender: TObject);
@@ -254,6 +262,12 @@ begin
   FBuffer := TTerminalBuffer.Create(80, 24, FTheme);
   FBuffer.OnResponse := HandleBufferResponse;
   FParser := TAnsiParser.Create(FTheme);
+  FTraceEnabled := SameText(GetEnvironmentVariable('NTIZGIN_TERMINAL_TRACE'), '1');
+  if FTraceEnabled then
+  begin
+    FTraceFileName := TPath.Combine(TPath.GetTempPath, 'nTizgin-terminal-trace.log');
+    TFile.AppendAllText(FTraceFileName, Format('# %s terminal trace start%s', [DateTimeToStr(Now), sLineBreak]), TEncoding.UTF8);
+  end;
   FRenderer := TTerminalRenderer.Create(FBuffer, FTheme);
 
   FCursorTimer := TTimer.Create(Self);
@@ -282,6 +296,8 @@ begin
   FEnableSyntaxHighlighting := False;
 
   FIsSelecting := False;
+  FSelectionDragOrigin := TPointF.Zero;
+  FSelectionDragStarted := False;
   FClearSelectionOnNextAction := False;
   FSelectionProtectedUntilTick := 0;
   FSuppressNextRightMouseUp := False;
@@ -764,6 +780,7 @@ begin
 
   if FParser.Parse(ProcessedText, Commands) then
   begin
+    TraceAnsiCommands(Commands);
     if Length(Commands) = 0 then
       Exit;
     for I := 0 to High(Commands) do
@@ -864,6 +881,8 @@ begin
   FSelectionStartAbs := TPoint.Create(StartCol, AbsY);
   FBuffer.SetSelection(StartCol, AbsY, EndCol, AbsY);
   FIsSelecting := False;
+  FSelectionDragOrigin := TPointF.Zero;
+  FSelectionDragStarted := False;
   FClearSelectionOnNextAction := False;
   if FAutoCopySelection then
     CopyToClipboard;
@@ -903,6 +922,7 @@ begin
       Text := TTerminalClipboard.NormalizeLineEndings(Text);
       if FBuffer.BracketedPaste then
         Text := TTerminalClipboard.WrapBracketedPaste(Text);
+      TraceTerminalData('IN paste', Text);
       FOnData(Text);
       if Assigned(FOnUserInput) then
         FOnUserInput(Text);
@@ -941,6 +961,7 @@ begin
   begin
     ClearSelectionOnTerminalAction;
     ResetViewportToBottom;
+    TraceKeyInput(Key, KeyChar, Shift, S);
     FOnData(S);
     if Assigned(FOnUserInput) then
       FOnUserInput(S);
@@ -980,7 +1001,10 @@ begin
     AState, FBuffer.MouseModes);
 
   if (S <> '') and Assigned(FOnData) then
+  begin
+    TraceTerminalData('IN mouse', S);
     FOnData(S);
+  end;
 end;
 
 function TnbTerminalControl.MouseReportingEnabled: Boolean;
@@ -1157,6 +1181,8 @@ begin
     begin
       AbsY := FBuffer.ScreenYToAbsolute(Row);
       FSelectionStartAbs := TPoint.Create(Col, AbsY);
+      FSelectionDragOrigin := TPointF.Create(X, Y);
+      FSelectionDragStarted := False;
       FIsSelecting := True;
     end;
     Exit;
@@ -1197,6 +1223,7 @@ begin
   if FIsSelecting then
   begin
     FIsSelecting := False;
+    FSelectionDragStarted := False;
     FSelectionAutoScrollDirection := 0;
     FSelectionAutoScrollTimer.Enabled := False;
     if FAutoCopySelection and FBuffer.HasSelection then
@@ -1257,6 +1284,13 @@ begin
   // Обновление выделения
   if FIsSelecting then
   begin
+    if not FSelectionDragStarted then
+    begin
+      if (Abs(X - FSelectionDragOrigin.X) < 4) and
+         (Abs(Y - FSelectionDragOrigin.Y) < 4) then
+        Exit;
+      FSelectionDragStarted := True;
+    end;
     FSelectionMousePos := TPointF.Create(X, Y);
     { FMX may clamp captured mouse coordinates to the control bounds, so start
       auto-scroll while the pointer is in the first/last visible cell row. }
@@ -1455,6 +1489,105 @@ begin
       #27'[0m'#13#10);
 end;
 
+procedure TnbTerminalControl.TraceKeyInput(Key: Word; KeyChar: WideChar;
+  Shift: TShiftState; const Data: string);
+var
+  ShiftText: string;
+begin
+  if not FTraceEnabled then
+    Exit;
+
+  ShiftText := '';
+  if ssShift in Shift then ShiftText := ShiftText + 'Shift,';
+  if ssAlt in Shift then ShiftText := ShiftText + 'Alt,';
+  if ssCtrl in Shift then ShiftText := ShiftText + 'Ctrl,';
+  if ssCommand in Shift then ShiftText := ShiftText + 'Command,';
+  if ssLeft in Shift then ShiftText := ShiftText + 'Left,';
+  if ssRight in Shift then ShiftText := ShiftText + 'Right,';
+  if ssMiddle in Shift then ShiftText := ShiftText + 'Middle,';
+  if ShiftText = '' then
+    ShiftText := 'none'
+  else
+    Delete(ShiftText, Length(ShiftText), 1);
+
+  TFile.AppendAllText(FTraceFileName,
+    Format('[%s] KEY key=%d keychar=%d shift=%s%s',
+    [FormatDateTime('hh:nn:ss.zzz', Now), Key, Ord(KeyChar), ShiftText,
+     sLineBreak]), TEncoding.UTF8);
+  TraceTerminalData('IN key', Data);
+end;
+procedure TnbTerminalControl.TraceTerminalData(const Direction, Data: string);
+var
+  I, Code: Integer;
+  Hex, View: TStringBuilder;
+
+  function VisibleByte(ACode: Integer): string;
+  begin
+    case ACode of
+      9: Result := '<TAB>';
+      10: Result := '<LF>';
+      13: Result := '<CR>';
+      27: Result := '<ESC>';
+      32..126: Result := Char(ACode);
+    else
+      Result := '<' + IntToStr(ACode) + '>';
+    end;
+  end;
+
+begin
+  if (not FTraceEnabled) or (Data = '') then
+    Exit;
+
+  Hex := TStringBuilder.Create;
+  View := TStringBuilder.Create;
+  try
+    for I := 1 to Length(Data) do
+    begin
+      Code := Ord(Data[I]) and $FF;
+      if I > 1 then
+        Hex.Append(' ');
+      Hex.Append(IntToHex(Code, 2));
+      View.Append(VisibleByte(Code));
+    end;
+
+    TFile.AppendAllText(FTraceFileName,
+      Format('[%s] %s len=%d cursor=%d,%d scroll=%d..%d hex=%s text=%s%s',
+      [FormatDateTime('hh:nn:ss.zzz', Now), Direction, Length(Data),
+       FBuffer.Cursor.X + 1, FBuffer.Cursor.Y + 1,
+       FBuffer.ScrollTop + 1, FBuffer.ScrollBottom + 1,
+       Hex.ToString, View.ToString, sLineBreak]), TEncoding.UTF8);
+  finally
+    Hex.Free;
+    View.Free;
+  end;
+end;
+
+procedure TnbTerminalControl.TraceAnsiCommands(const Commands: TArray<TAnsiCommand>);
+var
+  I, J: Integer;
+  Params: string;
+begin
+  if (not FTraceEnabled) or (Length(Commands) = 0) then
+    Exit;
+
+  for I := 0 to High(Commands) do
+  begin
+    Params := '';
+    for J := 0 to High(Commands[I].Params) do
+    begin
+      if J > 0 then
+        Params := Params + ',';
+      Params := Params + IntToStr(Commands[I].Params[J]);
+    end;
+
+    TFile.AppendAllText(FTraceFileName,
+      Format('[%s] CMD %s params=[%s] char="%s" cursor=%d,%d%s',
+      [FormatDateTime('hh:nn:ss.zzz', Now),
+       GetEnumName(TypeInfo(TAnsiParserCommand), Ord(Commands[I].Command)),
+       Params, Commands[I].Char, FBuffer.Cursor.X + 1, FBuffer.Cursor.Y + 1,
+       sLineBreak]), TEncoding.UTF8);
+  end;
+end;
 procedure TnbTerminalControl.HandleSSHReadData(Sender: TObject; const Data: string);
 var
   Filtered: string;
@@ -1463,7 +1596,10 @@ begin
   if Assigned(FOnHostOutput) then
     FOnHostOutput(Filtered);
   if Filtered <> '' then
+  begin
+    TraceTerminalData('OUT raw', Filtered);
     WriteText(Filtered);
+  end;
 end;
 
 procedure TnbTerminalControl.HandleOwnResize(Sender: TObject);
@@ -1476,7 +1612,10 @@ begin
   (* Ответы терминала на запросы хоста (DA, DSR) уходят в тот же канал,
      что и пользовательский ввод *)
   if Assigned(FOnData) then
+  begin
+    TraceTerminalData('IN response', S);
     FOnData(S);
+  end;
 end;
 
 function TnbTerminalControl.LoadThemeFromFile(const FileName: string;
