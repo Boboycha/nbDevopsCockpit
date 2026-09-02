@@ -618,18 +618,26 @@ end;
 procedure TTerminalRenderer.RenderBoxDrawingChar(Canvas: TCanvas; Ch: string;
   X, Y, W, H: Single; Color: TAlphaColor);
 var
-  Cx, Cy: Single;
+  Cx, Cy, Left, Top, Right, Bottom, PixelSize: Single;
   Code: Integer;
   DrawUp, DrawDown, DrawLeft, DrawRight: Boolean;
 begin
-  Canvas.Stroke.Kind := TBrushKind.Solid;
-  Canvas.Stroke.Color := Color;
-  Canvas.Stroke.Thickness := 1;
-  Canvas.Stroke.Dash := TStrokeDash.Solid;
-  Cx := Floor(X + (W / 2));
-  Cy := Floor(Y + (H / 2));
   if Length(Ch) <> 1 then
     Exit;
+
+  if FScaleX > 0 then
+    PixelSize := 1 / FScaleX
+  else
+    PixelSize := 1;
+  Left := SnapToPixel(X);
+  Top := SnapToPixel(Y);
+  Right := SnapToPixel(X + W);
+  Bottom := SnapToPixel(Y + H);
+  Cx := SnapToPixel(X + W / 2 - PixelSize / 2);
+  Cy := SnapToPixel(Y + H / 2 - PixelSize / 2);
+
+  Canvas.Fill.Kind := TBrushKind.Solid;
+  Canvas.Fill.Color := Color;
   Code := Ord(Ch[1]);
   DrawUp := False;
   DrawDown := False;
@@ -701,13 +709,17 @@ begin
   end;
 
   if DrawUp then
-    Canvas.DrawLine(TPointF.Create(Cx, Cy), TPointF.Create(Cx, Y), 1);
+    Canvas.FillRect(TRectF.Create(Cx, Top, Cx + PixelSize,
+      Cy + PixelSize), 0, 0, [], 1);
   if DrawDown then
-    Canvas.DrawLine(TPointF.Create(Cx, Cy), TPointF.Create(Cx, Y + H), 1);
+    Canvas.FillRect(TRectF.Create(Cx, Cy, Cx + PixelSize,
+      Bottom), 0, 0, [], 1);
   if DrawLeft then
-    Canvas.DrawLine(TPointF.Create(Cx, Cy), TPointF.Create(X, Cy), 1);
+    Canvas.FillRect(TRectF.Create(Left, Cy, Cx + PixelSize,
+      Cy + PixelSize), 0, 0, [], 1);
   if DrawRight then
-    Canvas.DrawLine(TPointF.Create(Cx, Cy), TPointF.Create(X + W, Cy), 1);
+    Canvas.FillRect(TRectF.Create(Cx, Cy, Right,
+      Cy + PixelSize), 0, 0, [], 1);
 end;
 
 function TTerminalRenderer.GetGlyphBitmap(const Ch: string; CellCount: Integer;

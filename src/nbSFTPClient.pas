@@ -113,8 +113,12 @@ type
     function PopCommand(out ACmd: TSFTPCommand): Boolean;
     function GetSessionError: string;
     function GetSFTPError: string;
+    function WaitSocket(ATimeoutMs: Integer): Boolean;
     function WaitResult(const AFunc: TFunc<Integer>): Integer;
+    function WaitResultFor(const AFunc: TFunc<Integer>;
+      ATimeoutMs: Cardinal): Integer;
     function WaitPointer(const AFunc: TFunc<Pointer>): Pointer;
+    procedure CloseHandle(var AHandle: PLIBSSH2_SFTP_HANDLE);
     function ConnectSession: Boolean;
     procedure CloseSession;
     procedure ProcessCommand(const ACmd: TSFTPCommand);
@@ -159,6 +163,7 @@ type
 
     procedure Connect;
     procedure Disconnect;
+    procedure RequestDisconnect;
     procedure SetPrivateKeyFromString(const APrivKeyPEM: AnsiString;
       const APubKey: AnsiString = '');
     procedure ClearPrivateKeyData;
@@ -223,6 +228,8 @@ const
   LIBSSH2_FX_EOF                = 1;
   LIBSSH2_FX_FILE_ALREADY_EXISTS = 11;
   RAW_STREAM_OPERATION_TIMEOUT_MS = 30000;
+  SFTP_WORKER_OPERATION_TIMEOUT_MS = 30000;
+  SFTP_HANDLE_CLOSE_TIMEOUT_MS = 1500;
   S_IFMT = $F000;
   S_IFDIR = $4000;
 
@@ -883,7 +890,7 @@ begin
       Result := Result + [Entry];
     end;
   finally
-    ssh2_sftp_close_handle(Handle);
+    CloseFile(Handle);
   end;
 end;
 
@@ -1015,28 +1022,127 @@ begin
   end;
 end;
 
-function TSFTPWorkerThread.WaitResult(const AFunc: TFunc<Integer>): Integer;
+function TSFTPWorkerThread.WaitSocket(ATimeoutMs: Integer): Boolean;
+var
+  Directions: Integer;
+  ReadSet, WriteSet: TFDSet;
+  ReadPtr, WritePtr: PFDSet;
+  TimeVal: TTimeVal;
 begin
-  repeat
-    Result := AFunc();
-    if Result <> LIBSSH2_ERROR_EAGAIN then Exit;
+  Result := False;
+  if (FSocket = nil) or (FSession = nil) or
+    not Assigned(ssh2_session_block_directions) then
+  begin
     Sleep(10);
-  until Terminated;
-  (* Поток остановлен штатно — не ошибка. *)
-  Result := 0;
+    Exit;
+  end;
+
+  Directions := ssh2_session_block_directions(FSession);
+  ReadPtr := nil;
+  WritePtr := nil;
+
+  if (Directions and LIBSSH2_SESSION_BLOCK_INBOUND) <> 0 then
+  begin
+    FD_ZERO(ReadSet);
+    FD_SET(FSocket.Socket, ReadSet);
+    ReadPtr := @ReadSet;
+  end;
+
+  if (Directions and LIBSSH2_SESSION_BLOCK_OUTBOUND) <> 0 then
+  begin
+    FD_ZERO(WriteSet);
+    FD_SET(FSocket.Socket, WriteSet);
+    WritePtr := @WriteSet;
+  end;
+
+  if (ReadPtr = nil) and (WritePtr = nil) then
+  begin
+    Sleep(10);
+    Exit;
+  end;
+
+  TimeVal.tv_sec := ATimeoutMs div 1000;
+  TimeVal.tv_usec := (ATimeoutMs mod 1000) * 1000;
+  Result := synsock.Select(FSocket.Socket + 1, ReadPtr, WritePtr, nil,
+    @TimeVal) > 0;
 end;
 
-function TSFTPWorkerThread.WaitPointer(const AFunc: TFunc<Pointer>): Pointer;
+function TSFTPWorkerThread.WaitResult(
+  const AFunc: TFunc<Integer>): Integer;
+var
+  Started: UInt64;
 begin
+  Started := TThread.GetTickCount64;
   repeat
     Result := AFunc();
-    if Result <> nil then Exit;
-    if (FSession = nil) or (ssh2_session_last_errno(FSession) <> LIBSSH2_ERROR_EAGAIN) then
+    if Result <> LIBSSH2_ERROR_EAGAIN then
       Exit;
-    Sleep(10);
-  until Terminated;
+    if Terminated then
+      Exit(0);
+    if TThread.GetTickCount64 - Started >=
+      SFTP_WORKER_OPERATION_TIMEOUT_MS then
+      raise Exception.Create('SFTP operation timed out');
+    WaitSocket(1000);
+  until False;
 end;
 
+function TSFTPWorkerThread.WaitResultFor(
+  const AFunc: TFunc<Integer>; ATimeoutMs: Cardinal): Integer;
+var
+  Started: UInt64;
+begin
+  Started := TThread.GetTickCount64;
+  repeat
+    Result := AFunc();
+    if Result <> LIBSSH2_ERROR_EAGAIN then
+      Exit;
+    if Terminated or
+      (TThread.GetTickCount64 - Started >= ATimeoutMs) then
+      Exit;
+    WaitSocket(100);
+  until False;
+end;
+
+function TSFTPWorkerThread.WaitPointer(
+  const AFunc: TFunc<Pointer>): Pointer;
+var
+  Started: UInt64;
+begin
+  Started := TThread.GetTickCount64;
+  repeat
+    Result := AFunc();
+    if Result <> nil then
+      Exit;
+    if (FSession = nil) or
+      (ssh2_session_last_errno(FSession) <> LIBSSH2_ERROR_EAGAIN) then
+      Exit;
+    if Terminated then
+      Exit(nil);
+    if TThread.GetTickCount64 - Started >=
+      SFTP_WORKER_OPERATION_TIMEOUT_MS then
+      raise Exception.Create('SFTP operation timed out');
+    WaitSocket(1000);
+  until False;
+end;
+
+procedure TSFTPWorkerThread.CloseHandle(
+  var AHandle: PLIBSSH2_SFTP_HANDLE);
+var
+  Handle: PLIBSSH2_SFTP_HANDLE;
+begin
+  if AHandle = nil then
+    Exit;
+  Handle := AHandle;
+  try
+    WaitResultFor(
+      function: Integer
+      begin
+        Result := ssh2_sftp_close_handle(Handle);
+      end, SFTP_HANDLE_CLOSE_TIMEOUT_MS);
+  except
+  end;
+  AHandle := nil;
+end;
 function TSFTPWorkerThread.ConnectSession: Boolean;
 var
   RC: Integer;
@@ -1241,7 +1347,7 @@ begin
     Synchronize(DoDirListing);
   finally
     Entries.Free;
-    ssh2_sftp_close_handle(Handle);
+    CloseHandle(Handle);
   end;
 end;
 
@@ -1302,7 +1408,7 @@ begin
     Stream.Free;
     if (not LSuccess) and FileExists(ALocalPath) then
       System.SysUtils.DeleteFile(ALocalPath);
-    ssh2_sftp_close_handle(Handle);
+    CloseHandle(Handle);
   end;
 end;
 
@@ -1355,7 +1461,7 @@ begin
     Synchronize(DoTransferDone);
   finally
     Stream.Free;
-    ssh2_sftp_close_handle(Handle);
+    CloseHandle(Handle);
   end;
 end;
 
@@ -1445,7 +1551,7 @@ procedure TSFTPWorkerThread.CmdDeleteDirRecursive(const ARemotePath: string);
         end;
       end;
     finally
-      ssh2_sftp_close_handle(Handle);
+      CloseHandle(Handle);
     end;
     // удаляем теперь пустую папку
     WaitResult(function: Integer
@@ -1488,7 +1594,7 @@ begin
     end));
   if Handle = nil then
     raise Exception.Create('Create remote file failed: ' + GetSFTPError);
-  ssh2_sftp_close_handle(Handle);
+  CloseHandle(Handle);
   Synchronize(DoOpDone);
 end;
 
@@ -1537,6 +1643,12 @@ begin
     FWorker.WaitFor;
     FreeAndNil(FWorker);
   end;
+end;
+
+procedure TnbSFTPClient.RequestDisconnect;
+begin
+  if FWorker <> nil then
+    FWorker.Terminate;
 end;
 
 procedure TnbSFTPClient.SetPrivateKeyFromString(const APrivKeyPEM: AnsiString;
