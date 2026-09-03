@@ -70,8 +70,7 @@ Skia ships with RAD Studio 12 and newer — no separate installation needed.
 In short: open `src/nbDevOpsCockpit.dpk` in RAD Studio, set the search paths,
 build and install the package.
 
-A detailed step-by-step guide is in [src/README_install.md](src/README_install.md)
-(in Russian).
+Additional development rules are in the [Developer Guide](docs/DEVELOPER_GUIDE.md).
 
 ## Quick start
 
@@ -107,5 +106,4 @@ The project is under active development. Planned components: `TnbGitLabClient`,
 
 ## Project Documentation
 
-- [Development Report](docs/DEVELOPMENT_REPORT.md)
 - [Developer Guide](docs/DEVELOPER_GUIDE.md)

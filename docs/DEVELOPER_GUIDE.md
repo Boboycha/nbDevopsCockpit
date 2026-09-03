@@ -4,7 +4,7 @@
 
 Use this package when an FMX application needs SSH, terminal, SFTP or file-transfer building blocks.
 
-The package should not know about `nbFleet` business rules. It may expose events and reusable components; the host application decides what to do with selected servers, files and actions.
+The package should not know about `nTizgin` business rules. It may expose events and reusable components; the host application decides what to do with selected servers, files and actions.
 
 ## Build Order
 

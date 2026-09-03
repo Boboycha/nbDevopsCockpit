@@ -1,6 +1,6 @@
 ﻿# nbDevOpsCockpit
 
-`nbDevOpsCockpit` - Delphi FMX uchun DevOps komponentlar paketi. Unda SSH, terminal, SFTP va fayl panel komponentlari bor. Paket `nbFleet` ichida ishlatiladi.
+`nbDevOpsCockpit` - Delphi FMX uchun DevOps komponentlar paketi. Unda SSH, terminal, SFTP va fayl panel komponentlari bor. Paket `nTizgin` ichida ishlatiladi.
 
 Tillar: [Русский](README.md) | [English](README.en.md) | [O'zbekcha](README.uz.md)
 
@@ -15,7 +15,7 @@ Tillar: [Русский](README.md) | [English](README.en.md) | [O'zbekcha](READ
 
 ## Hozirgi holat
 
-Paket `nbFleet` tomonidan faol ishlatiladi. Asosiy tekshirilgan platforma hozir Windows x64. Linux mosligi tayyorlanmoqda, shuning uchun platformaga bog'liq joylarda shartli kompilyatsiyani tekshirish kerak.
+Paket `nTizgin` tomonidan faol ishlatiladi. Windows x64 va Linux uchun platformaga bog'liq joylarda shartli kompilyatsiyani alohida tekshirish kerak.
 
 ## Bog'liqliklar
 
@@ -49,5 +49,4 @@ Linux/macOS'da mos shared library fayllari tizim loader'iga ko'rinishi kerak.
 
 ## Hujjatlar
 
-- [Development Report](docs/DEVELOPMENT_REPORT.md)
 - [Developer Guide](docs/DEVELOPER_GUIDE.md)

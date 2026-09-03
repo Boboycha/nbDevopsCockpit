@@ -1,7 +1,9 @@
 # nbDevOpsCockpit
 ## 2026-05-26 note
 
-`TnbFilePane` now supports app-driven palette colors through `ApplyColors(ABg, ASurface, ABorder, AText, AMuted, AAccent)`. nbFleet uses this so SFTP/file panes follow the active terminal theme. The last two arguments are optional for older callers.
+`TnbFilePane` supports app-driven palette colors through `ApplyColors(ABg, ASurface, ABorder, AText, AMuted, AAccent)`. nTizgin uses this so SFTP/file panes follow the active terminal theme. The last two arguments are optional for older callers.
+
+Development boundaries and integration notes are maintained in [Developer Guide](docs/DEVELOPER_GUIDE.md). Terminal behavior is tracked in [XTERM Conformance](docs/XTERM-CONFORMANCE.md).
 
 **Русский** | [English](README.en.md)
 
@@ -64,7 +66,7 @@ Skia входит в состав RAD Studio 12 и новее — отдельн
 Кратко: открыть `src/nbDevOpsCockpit.dpk` в RAD Studio, прописать пути поиска,
 собрать и установить пакет.
 
-Подробная пошаговая инструкция — в [src/README_install.md](src/README_install.md).
+Дополнительные правила разработки описаны в [руководстве разработчика](docs/DEVELOPER_GUIDE.md).
 
 ## Быстрый старт
 
@@ -100,5 +102,4 @@ end;
 
 ## Документация проекта
 
-- [Отчет о разработке](docs/DEVELOPMENT_REPORT.md)
 - [Руководство разработчика](docs/DEVELOPER_GUIDE.md)
