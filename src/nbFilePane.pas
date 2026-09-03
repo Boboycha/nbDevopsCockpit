@@ -146,9 +146,6 @@ type
       ATag: Integer): string;
     procedure HandleHeaderClick(Sender: TObject);
     procedure HandleNativeHeaderClick(AColumn: Integer);
-    procedure HandleListViewportChanged(Sender: TObject;
-      const OldViewportPosition, NewViewportPosition: TPointF;
-      const ContentSizeChanged: Boolean);
     procedure HandleListResize(Sender: TObject);
     procedure HandleListItemClick(AItemIndex: Integer; AShift: TShiftState);
     procedure HandleListItemDoubleClick(AItemIndex: Integer);
@@ -162,12 +159,10 @@ type
     procedure HandleSourceError(Sender: TObject; const AMsg: string);
     procedure HandleChanged(Sender: TObject);
 
-    procedure HandleDragEnd(Sender: TObject);
     procedure HandleDragOver(Sender: TObject; const AData: TDragObject;
       const APoint: TPointF; var AOperation: TDragOperation);
     procedure HandleDragDrop(Sender: TObject; const AData: TDragObject;
       const APoint: TPointF);
-    procedure SelectRowFromObject(AObject: TObject);
     procedure UpdateRowSelection;
     procedure HandleUp(Sender: TObject);
     procedure HandleRefresh(Sender: TObject);
@@ -519,8 +514,6 @@ procedure TnbFilePane.BuildUi;
     end;
   end;
 
-var
-  HeaderLine: TRectangle;
 begin
   FToolBar := TLayout.Create(Self);
   MarkInternalControl(FToolBar);
@@ -815,13 +808,6 @@ end;
 procedure TnbFilePane.UpdateScrollThumb;
 begin
   (* Native TVertScrollBox scrollbars are styled by FMX. *)
-end;
-
-procedure TnbFilePane.HandleListViewportChanged(Sender: TObject;
-  const OldViewportPosition, NewViewportPosition: TPointF;
-  const ContentSizeChanged: Boolean);
-begin
-  UpdateScrollThumb;
 end;
 
 procedure TnbFilePane.HandleListResize(Sender: TObject);
@@ -1329,15 +1315,6 @@ begin
     FDragSource := nil;
   end;
 end;
-procedure TnbFilePane.HandleDragEnd(Sender: TObject);
-begin
-  ClearDropIndicator;
-  SetDraggingCursor(False);
-  FDragSource := nil;
-  FDragArmed := False;
-  FDragging := False;
-end;
-
 procedure TnbFilePane.HandleDragOver(Sender: TObject; const AData: TDragObject;
   const APoint: TPointF; var AOperation: TDragOperation);
 begin
@@ -1356,31 +1333,6 @@ begin
   FDragSource := nil;
   if (Source <> nil) and (Source <> Self) and Assigned(FOnFileDrop) then
     FOnFileDrop(Self, Source);
-end;
-
-procedure TnbFilePane.SelectRowFromObject(AObject: TObject);
-var
-  Obj: TFmxObject;
-  TagValue: NativeInt;
-begin
-  if AObject is TFmxObject then
-  begin
-    Obj := TFmxObject(AObject);
-    TagValue := Obj.Tag;
-    if TagValue = PARENT_ENTRY_TAG then
-    begin
-      FSelectedIndex := PARENT_ENTRY_TAG;
-      FSelectedIndices.Clear;
-    end
-    else
-    begin
-      FSelectedIndex := EnsureRange(TagValue, 0, High(FEntries));
-      FSelectedIndices.Clear;
-      FSelectedIndices.Add(FSelectedIndex);
-      FSelectionAnchor := FSelectedIndex;
-    end;
-  end;
-  UpdateRowSelection;
 end;
 
 procedure TnbFilePane.UpdateRowSelection;

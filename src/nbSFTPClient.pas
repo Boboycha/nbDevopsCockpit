@@ -203,7 +203,7 @@ uses
   , Winapi.Windows
 {$ENDIF}
 {$IFDEF POSIX}
-  , Posix.Dlfcn
+  , Posix.Dlfcn, Posix.Unistd
 {$ENDIF}
   ;
 
