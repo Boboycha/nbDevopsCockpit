@@ -219,6 +219,8 @@
         <DCCReference Include="Terminal.Input.pas"/>
         <DCCReference Include="Terminal.Clipboard.pas"/>
         <DCCReference Include="Terminal.SSHBridge.pas"/>
+        <DCCReference Include="Terminal.LocalPTY.pas"/>
+        <DCCReference Include="Terminal.LocalSession.pas"/>
         <DCCReference Include="Terminal.Control.pas"/>
         <DCCReference Include="nbTextDocument.pas"/>
         <DCCReference Include="nbCodeEditor.pas"/>

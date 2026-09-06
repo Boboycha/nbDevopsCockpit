@@ -22,6 +22,8 @@ msbuild src\nbDevOpsCockpit.dproj /t:Build /p:Config=Debug /p:Platform=Win64
 
 - `ModernSSHClient.pas` - high-level SSH client component.
 - `Terminal.Control.pas` - FMX terminal control.
+- `Terminal.LocalSession.pas`, `Terminal.LocalPTY.pas` - local shells on Windows,
+  Linux and macOS; see [Local terminal](LOCAL-TERMINAL.md) for usage and validation.
 - `nbSFTPClient.pas` - SFTP client/session layer.
 - `nbSFTPTransfer.pas` - streaming transfer worker.
 - `nbFilePane.pas` - reusable file panel component.

@@ -55,6 +55,8 @@ contains
   Terminal.Input in 'Terminal.Input.pas',
   Terminal.Clipboard in 'Terminal.Clipboard.pas',
   Terminal.SSHBridge in 'Terminal.SSHBridge.pas',
+  Terminal.LocalPTY in 'Terminal.LocalPTY.pas',
+  Terminal.LocalSession in 'Terminal.LocalSession.pas',
   Terminal.Control in 'Terminal.Control.pas',
   nbTextDocument in 'nbTextDocument.pas',
   nbCodeEditor in 'nbCodeEditor.pas',

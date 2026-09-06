@@ -39,6 +39,10 @@ type
     procedure BrowseKeyClick(Sender: TObject);
   private
     FThemes: TGoghThemeInfoArray;
+    FLocalButton: TCornerButton;
+    FSessionTimer: TTimer;
+    procedure LocalClick(Sender: TObject);
+    procedure SessionTimer(Sender: TObject);
     procedure SSHConnecting(Sender: TObject);
     procedure SSHConnected(Sender: TObject);
     procedure SSHError(Sender: TObject; const Msg: string);
@@ -82,12 +86,31 @@ begin
     Exit;
   end;
 
+  TerminalControl1.StopLocalSession;
+  TerminalControl1.SSHClient := SSHClient1;
   SSHClient1.Connect;
 end;
 
 procedure TDemoForm.Button2Click(Sender: TObject);
 begin
+  TerminalControl1.StopLocalSession;
   SSHClient1.Disconnect;
+  UpdateButtons;
+end;
+
+procedure TDemoForm.LocalClick(Sender: TObject);
+begin
+  try
+    TerminalControl1.StartLocalSession;
+    UpdateButtons;
+  except
+    on E: Exception do ShowMessage(E.Message);
+  end;
+end;
+
+procedure TDemoForm.SessionTimer(Sender: TObject);
+begin
+  UpdateButtons;
 end;
 
 procedure TDemoForm.BrowseThemeClick(Sender: TObject);
@@ -129,6 +152,15 @@ end;
 
 procedure TDemoForm.UpdateButtons;
 begin
+  if Assigned(TerminalControl1.LocalSession) and
+    TerminalControl1.LocalSession.Running then
+  begin
+    CornerButton1.Enabled := False;
+    CornerButton2.Enabled := True;
+    FLocalButton.Enabled := False;
+    Exit;
+  end;
+  FLocalButton.Enabled := SSHClient1.Status in [ssIdle, ssError];
   case SSHClient1.Status of
     ssIdle:
       begin
@@ -183,6 +215,14 @@ var
   I: Integer;
   ThemesDir: string;
 begin
+  FLocalButton := TCornerButton.Create(Self);
+  FLocalButton.Parent := Panel1;
+  FLocalButton.SetBounds(485, 36, 125, 22);
+  FLocalButton.Text := 'Local terminal';
+  FLocalButton.OnClick := LocalClick;
+  FSessionTimer := TTimer.Create(Self);
+  FSessionTimer.Interval := 200;
+  FSessionTimer.OnTimer := SessionTimer;
   TerminalControl1.TabStop := True;
   TerminalControl1.CanFocus := True;
 

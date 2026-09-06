@@ -10,7 +10,7 @@ uses
   FMX.Consts, FMX.Platform,
   Terminal.Types, Terminal.Buffer, Terminal.AnsiParser, Terminal.Renderer,
   Terminal.Theme, Terminal.Input, Terminal.Clipboard, Terminal.SSHBridge,
-  ModernSSHClient, GoghThemeLoader;
+  ModernSSHClient, GoghThemeLoader, Terminal.LocalSession;
 
 type
   TTerminalDataEvent = procedure(const S: string) of object;
@@ -60,6 +60,7 @@ type
     FScrollBarDragOffset: Single;
     FActiveMouseButton: Integer;
     FSSHBridge: TTerminalSSHBridge;
+    FLocalSession: TnbLocalTerminalSession;
     FShowSSHErrors: Boolean;
     FTraceEnabled: Boolean;
     FTraceFileName: string;
@@ -72,6 +73,7 @@ type
     procedure HandleSSHConnected(Sender: TObject);
     procedure HandleSSHError(Sender: TObject; const ErrorMessage: string);
     procedure HandleSSHReadData(Sender: TObject; const Data: string);
+    procedure HandleLocalError(Sender: TObject; const Data: string);
     procedure HandleOwnResize(Sender: TObject);
     procedure HandleBufferResponse(const S: string);
     procedure TraceTerminalData(const Direction, Data: string);
@@ -151,6 +153,9 @@ protected
 
     procedure WriteText(const Text: string);
     procedure Clear;
+    procedure StartLocalSession(const Executable: string = '';
+      const Arguments: TArray<string> = nil; const Directory: string = '');
+    procedure StopLocalSession;
 
     (* Внешняя подача клавиши в терминал. Нужна, когда форма перехватывает
        клавишу (например Tab — FMX уводит его на навигацию по фокусу). *)
@@ -173,6 +178,7 @@ protected
     property Rows: Integer read GetRows;
     property DeferHostResize: Boolean read FDeferHostResize
       write SetDeferHostResize;
+    property LocalSession: TnbLocalTerminalSession read FLocalSession;
 
   published
     (* Свойства TControl, публикуемые заново: базовый класс сменился
@@ -326,6 +332,7 @@ end;
 
 destructor TnbTerminalControl.Destroy;
 begin
+  FreeAndNil(FLocalSession);
   SetSSHClient(nil);  (* отписаться от старого клиента *)
   FSelectionAutoScrollTimer.Free;
   FRenderTimer.Free;
@@ -504,6 +511,7 @@ end;
 
 procedure TnbTerminalControl.RenderTimerProc(Sender: TObject);
 begin
+  if Assigned(FLocalSession) then FLocalSession.Pump;
   if FNeedRedraw then
   begin
     FNeedRedraw := False;
@@ -625,7 +633,9 @@ begin
     ((FPendingHostCols <> FLastHostCols) or
      (FPendingHostRows <> FLastHostRows)) then
   begin
-    FSSHBridge.ResizePTY(FPendingHostCols, FPendingHostRows);
+    if Assigned(FLocalSession) and FLocalSession.Running then
+      FLocalSession.ResizePTY(FPendingHostCols, FPendingHostRows)
+    else FSSHBridge.ResizePTY(FPendingHostCols, FPendingHostRows);
     FLastHostCols := FPendingHostCols;
     FLastHostRows := FPendingHostRows;
   end;
@@ -1439,6 +1449,7 @@ end;
 
 procedure TnbTerminalControl.SetSSHClient(const Value: TnbSSHClient);
 begin
+  if Assigned(Value) then StopLocalSession;
   if GetSSHClient = Value then Exit;
 
   FSSHBridge.Client := Value;
@@ -1460,6 +1471,44 @@ begin
     OnData := nil;
     OnResized := nil;
   end;
+end;
+
+procedure TnbTerminalControl.StartLocalSession(const Executable: string;
+  const Arguments: TArray<string>; const Directory: string);
+var
+  Client: TnbSSHClient;
+begin
+  Client := GetSSHClient;
+  if Assigned(Client) and
+    (Client.Status in [ssConnecting, ssAuthenticating, ssConnected]) then
+    raise EInvalidOperation.Create('Disconnect SSH before starting a local terminal');
+  SetSSHClient(nil);
+  if not Assigned(FLocalSession) then
+  begin
+    FLocalSession := TnbLocalTerminalSession.Create(Self);
+    FLocalSession.OnReadData := HandleSSHReadData;
+    FLocalSession.OnError := HandleLocalError;
+  end;
+  UpdateTerminalSize(False);
+  Clear;
+  FLocalSession.Start(Executable, Arguments, Directory, Cols, Rows);
+  OnData := FLocalSession.SendText;
+  OnResized := HandleOwnResize;
+  FLastHostCols := Cols;
+  FLastHostRows := Rows;
+  FPendingHostCols := 0;
+  FPendingHostRows := 0;
+  SetFocus;
+end;
+
+procedure TnbTerminalControl.StopLocalSession;
+begin
+  if Assigned(FLocalSession) then FLocalSession.Stop;
+end;
+
+procedure TnbTerminalControl.HandleLocalError(Sender: TObject; const Data: string);
+begin
+  WriteText(#13#10 + #27'[1;31mLocal terminal: ' + Data + #27'[0m'#13#10);
 end;
 
 procedure TnbTerminalControl.Notification(AComponent: TComponent;
