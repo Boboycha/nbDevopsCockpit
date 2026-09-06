@@ -11,6 +11,7 @@ object DemoForm: TDemoForm
   DesignerMasterStyle = 0
   object TerminalControl1: TnbTerminalControl
     Align = Client
+    CanFocus = True
     HitTest = True
     Size.Width = 640.000000000000000000
     Size.Height = 416.000000000000000000
@@ -18,6 +19,7 @@ object DemoForm: TDemoForm
     FontSize = 13.000000000000000000
     FontFamily = 'Source Code Pro'
     SSHClient = SSHClient1
+    TabStop = True
   end
   object odTheme: TOpenDialog
     Left = 304
@@ -44,6 +46,7 @@ object DemoForm: TDemoForm
       OnClick = Button1Click
     end
     object CornerButton2: TCornerButton
+      Enabled = False
       Position.X = 98.000000000000000000
       Position.Y = 36.000000000000000000
       Sides = [Top, Left, Bottom, Right]
@@ -97,6 +100,7 @@ object DemoForm: TDemoForm
       Text = #1061#1086#1089#1090':'
     end
     object edHost: TEdit
+      Text = ''
       Touch.InteractiveGestures = [LongTap, DoubleTap]
       TabOrder = 4
       Position.X = 42.000000000000000000
@@ -114,6 +118,7 @@ object DemoForm: TDemoForm
       Text = #1055#1086#1088#1090':'
     end
     object edPort: TEdit
+      Text = '22'
       Touch.InteractiveGestures = [LongTap, DoubleTap]
       TabOrder = 5
       Position.X = 196.000000000000000000
@@ -131,6 +136,7 @@ object DemoForm: TDemoForm
       Text = #1055#1086#1083#1100#1079#1086#1074#1072#1090#1077#1083#1100':'
     end
     object edUser: TEdit
+      Text = ''
       Touch.InteractiveGestures = [LongTap, DoubleTap]
       TabOrder = 6
       Position.X = 338.000000000000000000
@@ -148,6 +154,7 @@ object DemoForm: TDemoForm
       Text = #1050#1083#1102#1095':'
     end
     object edKeyPath: TEdit
+      Text = ''
       Touch.InteractiveGestures = [LongTap, DoubleTap]
       TabOrder = 7
       Position.X = 458.000000000000000000
@@ -170,20 +177,45 @@ object DemoForm: TDemoForm
       YRadius = 3.000000000000000000
       OnClick = BrowseKeyClick
     end
+    object btnLocalTerminal: TCornerButton
+      Position.X = 485.000000000000000000
+      Position.Y = 36.000000000000000000
+      Sides = [Top, Left, Bottom, Right]
+      Size.Width = 125.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 9
+      Text = 'Local terminal'
+      OnClick = LocalClick
+    end
   end
   object odKey: TOpenDialog
     Left = 352
     Top = 216
   end
   object SSHClient1: TnbSSHClient
+    Host = ''
     Port = '22'
+    User = ''
+    KeyPath = ''
     InitialCols = 80
     InitialRows = 26
+    OnConnecting = SSHConnecting
+    OnConnected = SSHConnected
+    OnDisconnected = SSHDisconnected
+    OnError = SSHError
     Left = 448
     Top = 176
   end
   object ActionList1: TActionList
     Left = 504
     Top = 352
+  end
+  object tmrSessionState: TTimer
+    Enabled = True
+    Interval = 200
+    OnTimer = SessionTimer
+    Left = 400
+    Top = 216
   end
 end

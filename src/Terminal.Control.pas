@@ -186,6 +186,7 @@ protected
        ломается загрузка из .fmx. *)
     property Align;
     property Anchors;
+    property CanFocus default True;
     property ClipChildren;
     property ClipParent;
     property Cursor;
@@ -204,7 +205,7 @@ protected
     property Scale;
     property Size;
     property TabOrder;
-    property TabStop;
+    property TabStop default False;
     property Visible;
     property Width;
     property OnClick;

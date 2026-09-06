@@ -31,22 +31,22 @@ type
     edKeyPath: TEdit;
     btnBrowseKey: TCornerButton;
     odKey: TOpenDialog;
+    btnLocalTerminal: TCornerButton;
+    tmrSessionState: TTimer;
     procedure FormCreate(Sender: TObject);
     procedure Button1Click(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure BrowseThemeClick(Sender: TObject);
     procedure cbThemeChange(Sender: TObject);
     procedure BrowseKeyClick(Sender: TObject);
-  private
-    FThemes: TGoghThemeInfoArray;
-    FLocalButton: TCornerButton;
-    FSessionTimer: TTimer;
     procedure LocalClick(Sender: TObject);
     procedure SessionTimer(Sender: TObject);
     procedure SSHConnecting(Sender: TObject);
     procedure SSHConnected(Sender: TObject);
     procedure SSHError(Sender: TObject; const Msg: string);
     procedure SSHDisconnected(Sender: TObject);
+  private
+    FThemes: TGoghThemeInfoArray;
     procedure UpdateButtons;
   public
   end;
@@ -157,10 +157,10 @@ begin
   begin
     CornerButton1.Enabled := False;
     CornerButton2.Enabled := True;
-    FLocalButton.Enabled := False;
+    btnLocalTerminal.Enabled := False;
     Exit;
   end;
-  FLocalButton.Enabled := SSHClient1.Status in [ssIdle, ssError];
+  btnLocalTerminal.Enabled := SSHClient1.Status in [ssIdle, ssError];
   case SSHClient1.Status of
     ssIdle:
       begin
@@ -215,34 +215,6 @@ var
   I: Integer;
   ThemesDir: string;
 begin
-  FLocalButton := TCornerButton.Create(Self);
-  FLocalButton.Parent := Panel1;
-  FLocalButton.SetBounds(485, 36, 125, 22);
-  FLocalButton.Text := 'Local terminal';
-  FLocalButton.OnClick := LocalClick;
-  FSessionTimer := TTimer.Create(Self);
-  FSessionTimer.Interval := 200;
-  FSessionTimer.OnTimer := SessionTimer;
-  TerminalControl1.TabStop := True;
-  TerminalControl1.CanFocus := True;
-
-  // Подписываемся на отдельные события SSH — OnStatusChange занят TerminalControl1
-  SSHClient1.OnConnecting   := SSHConnecting;
-  SSHClient1.OnConnected    := SSHConnected;
-  SSHClient1.OnError        := SSHError;
-  SSHClient1.OnDisconnected := SSHDisconnected;
-
-  // Начальное состояние кнопок
-  CornerButton2.Enabled := False;
-  SSHClient1.Host := '';
-  SSHClient1.Port := '22';
-  SSHClient1.User := '';
-  SSHClient1.KeyPath := '';
-  edHost.Text := '';
-  edPort.Text := SSHClient1.Port;
-  edUser.Text := '';
-  edKeyPath.Text := '';
-
   // Рядом с exe (деплой); при разработке — в репозитории demo\themes\
   ThemesDir := ExtractFilePath(ParamStr(0)) + 'themes\';
   if not DirectoryExists(ThemesDir) then
