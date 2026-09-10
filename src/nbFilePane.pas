@@ -68,6 +68,11 @@ type
     FBreadcrumbBg: TRectangle;
     FBreadcrumbBar: TFlowLayout;
     FBreadcrumbPaths: TArray<string>;
+    FHistoryButton: TnbToolButton;
+    FHistoryPopup: TPopup;
+    FHistoryPopupBg: TRectangle;
+    FHistoryList: TVertScrollBox;
+    FPathHistory: TList<string>;
     FListHost: TRectangle;
     FHeader: TLayout;
     FList: TnbFileListView;
@@ -173,6 +178,10 @@ type
     procedure HandleTransfer(Sender: TObject);
     procedure RebuildBreadcrumbs(const APath: string);
     procedure HandleBreadcrumbClick(Sender: TObject);
+    procedure AddHistoryPath(const APath: string);
+    procedure UpdateHistoryButton;
+    procedure ShowHistoryMenu(Sender: TObject);
+    procedure HandleHistoryItemClick(Sender: TObject);
     class procedure SplitPathSegments(const APath: string;
       out ALabels, AFullPaths: TArray<string>); static;
     procedure SetBusy(AValue: Boolean);
@@ -210,6 +219,8 @@ type
     procedure CommandRename;
     procedure CommandDelete;
     procedure CommandTransfer;
+    function GetPathHistory: TArray<string>;
+    procedure SetPathHistory(const AHistory: TArray<string>);
     procedure SetActionStrings(
       const AHintNewFolder, AHintRename, AHintDelete: string;
       const ANewFolderTitle, ANewFolderLabel: string;
@@ -335,6 +346,7 @@ begin
     FInstances := TList<TnbFilePane>.Create;
   FInstances.Add(Self);
   FButtons := TList<TnbToolButton>.Create;
+  FPathHistory := TList<string>.Create;
   FToolbarVisible := True;
   FSelectedIndices := TList<Integer>.Create;
   FSelectedIndex := -1;
@@ -378,6 +390,7 @@ begin
     end;
   end;
   FButtons.Free;
+  FPathHistory.Free;
   FSelectedIndices.Free;
   inherited;
 end;
@@ -561,8 +574,54 @@ begin
   MarkInternalControl(FBreadcrumbBar);
   FBreadcrumbBar.Parent := FBreadcrumbBg;
   FBreadcrumbBar.Align := TAlignLayout.Client;
-  FBreadcrumbBar.Margins.Rect := RectF(8, 0, 8, 0);
+  FBreadcrumbBar.Margins.Rect := RectF(8, 0, 30, 0);
   FBreadcrumbBar.HitTest := True;
+
+  FHistoryButton := TnbToolButton.Create(Self);
+  MarkInternalControl(FHistoryButton);
+  FHistoryButton.Parent := FBreadcrumbBg;
+  FHistoryButton.Align := TAlignLayout.Right;
+  FHistoryButton.Width := 24;
+  FHistoryButton.Margins.Rect := RectF(0, 3, 4, 3);
+  FHistoryButton.StyleLookup := ScopedStyle('speedbuttonstyle');
+  FHistoryButton.Hint := 'History';
+  FHistoryButton.ShowHint := True;
+  FHistoryButton.Glyph := 'down';
+  FHistoryButton.SetGlyphColor(FColText);
+  FHistoryButton.OnClick := ShowHistoryMenu;
+  FButtons.Add(FHistoryButton);
+
+  FHistoryPopup := TPopup.Create(Self);
+  MarkInternalControl(FHistoryPopup);
+  FHistoryPopup.Parent := FHistoryButton;
+  FHistoryPopup.PlacementTarget := FHistoryButton;
+  FHistoryPopup.Placement := TPlacement.Bottom;
+  FHistoryPopup.Stored := False;
+  FHistoryPopup.Locked := True;
+  FHistoryPopup.DragWithParent := True;
+  FHistoryPopup.HideWhenPlacementTargetInvisible := True;
+
+  FHistoryPopupBg := TRectangle.Create(FHistoryPopup);
+  MarkInternalControl(FHistoryPopupBg);
+  FHistoryPopupBg.Parent := FHistoryPopup;
+  FHistoryPopupBg.Align := TAlignLayout.Client;
+  FHistoryPopupBg.Fill.Kind := TBrushKind.Solid;
+  FHistoryPopupBg.Fill.Color := FColSurface;
+  FHistoryPopupBg.Stroke.Kind := TBrushKind.Solid;
+  FHistoryPopupBg.Stroke.Color := FColBorder;
+  FHistoryPopupBg.Stroke.Thickness := 1;
+  FHistoryPopupBg.XRadius := 4;
+  FHistoryPopupBg.YRadius := 4;
+  FHistoryPopupBg.HitTest := True;
+
+  FHistoryList := TVertScrollBox.Create(FHistoryPopupBg);
+  MarkInternalControl(FHistoryList);
+  FHistoryList.Parent := FHistoryPopupBg;
+  FHistoryList.Align := TAlignLayout.Client;
+  FHistoryList.Margins.Rect := RectF(1, 1, 1, 1);
+  FHistoryList.ShowScrollBars := True;
+  FHistoryList.AutoHide := True;
+  UpdateHistoryButton;
 
   FListHost := TRectangle.Create(Self);
   MarkInternalControl(FListHost);
@@ -727,6 +786,9 @@ end;
 procedure TnbFilePane.SetSource(const ASource: InbFileSource);
 begin
   FSource := ASource;
+  if FPathHistory <> nil then
+    FPathHistory.Clear;
+  UpdateHistoryButton;
   if FSource <> nil then
   begin
     FSource.OnListing := HandleListing;
@@ -756,6 +818,7 @@ procedure TnbFilePane.HandleListing(Sender: TObject; const APath: string;
 begin
   SetBusy(False);
   FPath := APath;
+  AddHistoryPath(APath);
   RebuildBreadcrumbs(APath);
   FEntries := AEntries;
   FSelectedIndex := -1;
@@ -1683,6 +1746,158 @@ begin
     Navigate(FBreadcrumbPaths[Idx]);
 end;
 
+function TnbFilePane.GetPathHistory: TArray<string>;
+var
+  I: Integer;
+begin
+  Result := nil;
+  if FPathHistory = nil then
+    Exit;
+  SetLength(Result, FPathHistory.Count);
+  for I := 0 to FPathHistory.Count - 1 do
+    Result[I] := FPathHistory[I];
+end;
+
+procedure TnbFilePane.SetPathHistory(const AHistory: TArray<string>);
+var
+  I: Integer;
+begin
+  if FPathHistory = nil then
+    Exit;
+  FPathHistory.Clear;
+  for I := 0 to High(AHistory) do
+    AddHistoryPath(AHistory[I]);
+  UpdateHistoryButton;
+end;
+
+procedure TnbFilePane.AddHistoryPath(const APath: string);
+const
+  MAX_HISTORY = 25;
+var
+  I: Integer;
+  Path: string;
+begin
+  if FPathHistory = nil then
+    Exit;
+  Path := Trim(APath);
+  if Path = '' then
+    Exit;
+
+  for I := FPathHistory.Count - 1 downto 0 do
+    if SameText(FPathHistory[I], Path) then
+      FPathHistory.Delete(I);
+  FPathHistory.Add(Path);
+  while FPathHistory.Count > MAX_HISTORY do
+    FPathHistory.Delete(0);
+  UpdateHistoryButton;
+end;
+
+procedure TnbFilePane.UpdateHistoryButton;
+var
+  HasHistory: Boolean;
+begin
+  if FHistoryButton = nil then
+    Exit;
+  HasHistory := (FPathHistory <> nil) and (FPathHistory.Count > 1);
+  FHistoryButton.Enabled := HasHistory;
+  if HasHistory then
+    FHistoryButton.Opacity := 1
+  else
+  begin
+    FHistoryButton.Opacity := 0.45;
+    if FHistoryPopup <> nil then
+      FHistoryPopup.IsOpen := False;
+  end;
+end;
+
+procedure TnbFilePane.ShowHistoryMenu(Sender: TObject);
+const
+  ITEM_H = 28;
+  POPUP_MIN_W = 260;
+  POPUP_MAX_W = 460;
+  POPUP_MAX_H = 220;
+var
+  I: Integer;
+  RowTop: Single;
+  Row: TRectangle;
+  Lbl: TLabel;
+  Content: TScrollContent;
+  PathText: string;
+begin
+  if (FHistoryPopup = nil) or (FHistoryList = nil) or
+    (FPathHistory = nil) or (FPathHistory.Count = 0) then
+    Exit;
+
+  if FHistoryPopup.IsOpen then
+  begin
+    FHistoryPopup.IsOpen := False;
+    Exit;
+  end;
+
+  Content := FHistoryList.Content;
+  if Content <> nil then
+    while Content.ChildrenCount > 0 do
+      Content.Children[Content.ChildrenCount - 1].Free;
+
+  RowTop := 0;
+  for I := FPathHistory.Count - 1 downto 0 do
+  begin
+    PathText := FPathHistory[I];
+
+    Row := TRectangle.Create(FHistoryList);
+    MarkInternalControl(Row);
+    Row.Parent := FHistoryList;
+    Row.Position.Y := RowTop;
+    Row.Align := TAlignLayout.Top;
+    Row.Height := ITEM_H;
+    Row.Fill.Kind := TBrushKind.Solid;
+    Row.Fill.Color := FColSurface;
+    Row.Stroke.Kind := TBrushKind.None;
+    Row.HitTest := True;
+    Row.Cursor := crHandPoint;
+    Row.Tag := I;
+    Row.OnClick := HandleHistoryItemClick;
+
+    Lbl := TLabel.Create(Row);
+    MarkInternalControl(Lbl);
+    Lbl.Parent := Row;
+    Lbl.Align := TAlignLayout.Client;
+    Lbl.Margins.Rect := RectF(9, 0, 9, 0);
+    Lbl.HitTest := False;
+    Lbl.Text := PathText;
+    Lbl.StyledSettings :=
+      Lbl.StyledSettings - [TStyledSetting.FontColor, TStyledSetting.Size];
+    Lbl.TextSettings.Font.Size := 12;
+    Lbl.TextSettings.FontColor := FColText;
+    Lbl.TextSettings.HorzAlign := TTextAlign.Leading;
+    Lbl.TextSettings.VertAlign := TTextAlign.Center;
+    Lbl.TextSettings.Trimming := TTextTrimming.Character;
+
+    RowTop := RowTop + ITEM_H;
+  end;
+
+  FHistoryList.ViewportPosition := PointF(0, 0);
+  FHistoryPopup.Width := EnsureRange(Width - 24, POPUP_MIN_W, POPUP_MAX_W);
+  FHistoryPopup.Height := Min(POPUP_MAX_H, Max(ITEM_H + 2, RowTop + 2));
+  FHistoryPopup.PlacementTarget := FHistoryButton;
+  FHistoryPopup.IsOpen := True;
+end;
+
+procedure TnbFilePane.HandleHistoryItemClick(Sender: TObject);
+var
+  Idx: Integer;
+begin
+  if not (Sender is TControl) or (FPathHistory = nil) then
+    Exit;
+  Idx := TControl(Sender).Tag;
+  if (Idx >= 0) and (Idx < FPathHistory.Count) then
+  begin
+    if FHistoryPopup <> nil then
+      FHistoryPopup.IsOpen := False;
+    Navigate(FPathHistory[Idx]);
+  end;
+end;
+
 procedure TnbFilePane.ApplyColors(ABg, ASurface, ABorder, AText,
   AMuted, AAccent: TAlphaColor);
 var
@@ -1715,6 +1930,11 @@ begin
     FBreadcrumbBg.Fill.Color := ABg;
     FBreadcrumbBg.Stroke.Color := ABorder;
     RebuildBreadcrumbs(FPath);
+  end;
+  if FHistoryPopupBg <> nil then
+  begin
+    FHistoryPopupBg.Fill.Color := ASurface;
+    FHistoryPopupBg.Stroke.Color := ABorder;
   end;
   if FListHost <> nil then
   begin

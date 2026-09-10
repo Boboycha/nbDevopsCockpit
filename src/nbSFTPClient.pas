@@ -119,7 +119,7 @@ type
       ATimeoutMs: Cardinal): Integer;
     function WaitPointer(const AFunc: TFunc<Pointer>): Pointer;
     procedure CloseHandle(var AHandle: PLIBSSH2_SFTP_HANDLE);
-    function ConnectSession: Boolean;
+    function ConnectSession(ANotify: Boolean = True): Boolean;
     procedure CloseSession;
     procedure ProcessCommand(const ACmd: TSFTPCommand);
     procedure CmdListDir(const APath: string);
@@ -1143,7 +1143,7 @@ begin
   end;
   AHandle := nil;
 end;
-function TSFTPWorkerThread.ConnectSession: Boolean;
+function TSFTPWorkerThread.ConnectSession(ANotify: Boolean): Boolean;
 var
   RC: Integer;
   AnsiUser, AnsiPwd, AnsiPassphrase: AnsiString;
@@ -1158,7 +1158,8 @@ begin
   if FSocket.LastError <> 0 then
   begin
     FCurrentError := 'TCP connect failed: ' + FSocket.LastErrorDesc;
-    Synchronize(DoError);
+    if ANotify then
+      Synchronize(DoError);
     Exit;
   end;
 
@@ -1166,7 +1167,8 @@ begin
   if FSession = nil then
   begin
     FCurrentError := 'libssh2_session_init failed';
-    Synchronize(DoError);
+    if ANotify then
+      Synchronize(DoError);
     Exit;
   end;
 
@@ -1174,7 +1176,8 @@ begin
   if RC <> 0 then
   begin
     FCurrentError := 'SSH handshake failed: ' + GetSessionError;
-    Synchronize(DoError);
+    if ANotify then
+      Synchronize(DoError);
     Exit;
   end;
 
@@ -1198,14 +1201,16 @@ begin
   else
   begin
     FCurrentError := 'No authentication method';
-    Synchronize(DoError);
+    if ANotify then
+      Synchronize(DoError);
     Exit;
   end;
 
   if RC <> 0 then
   begin
     FCurrentError := 'Authentication failed: ' + GetSessionError;
-    Synchronize(DoError);
+    if ANotify then
+      Synchronize(DoError);
     Exit;
   end;
 
@@ -1218,12 +1223,14 @@ begin
   if FSFTP = nil then
   begin
     FCurrentError := 'SFTP init failed: ' + GetSessionError;
-    Synchronize(DoError);
+    if ANotify then
+      Synchronize(DoError);
     Exit;
   end;
 
   Result := True;
-  Synchronize(DoConnected);
+  if ANotify then
+    Synchronize(DoConnected);
 end;
 
 procedure TSFTPWorkerThread.CloseSession;
@@ -1246,6 +1253,7 @@ end;
 procedure TSFTPWorkerThread.Execute;
 var
   Cmd: TSFTPCommand;
+  ErrorMessage: string;
 begin
   try
     if not ConnectSession then Exit;
@@ -1258,7 +1266,30 @@ begin
         except
           on E: Exception do
           begin
-            FCurrentError := E.Message;
+            ErrorMessage := E.Message;
+            if (Cmd.Kind = sckListDir) and not Terminated then
+            begin
+              CloseSession;
+              try
+                if ConnectSession(False) and not Terminated then
+                begin
+                  try
+                    ProcessCommand(Cmd);
+                    Continue;
+                  except
+                    on RetryError: Exception do
+                      ErrorMessage := RetryError.Message;
+                  end;
+                end
+                else if FCurrentError <> '' then
+                  ErrorMessage := FCurrentError;
+              except
+                on ReconnectError: Exception do
+                  ErrorMessage := ErrorMessage + '; reconnect failed: ' +
+                    ReconnectError.Message;
+              end;
+            end;
+            FCurrentError := ErrorMessage;
             Synchronize(DoError);
           end;
         end;
