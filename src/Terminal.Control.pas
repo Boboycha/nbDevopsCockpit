@@ -44,6 +44,7 @@ type
     // Для выделения
     FIsSelecting: Boolean;
     FSelectionStartAbs: TPoint;
+    FHasSelectionStart: Boolean;
     FSelectionDragOrigin: TPointF;
     FSelectionDragStarted: Boolean;
     FSelectionAutoScrollTimer: TTimer;
@@ -303,6 +304,7 @@ begin
   FEnableSyntaxHighlighting := False;
 
   FIsSelecting := False;
+  FHasSelectionStart := False;
   FSelectionDragOrigin := TPointF.Zero;
   FSelectionDragStarted := False;
   FClearSelectionOnNextAction := False;
@@ -807,6 +809,7 @@ begin
   FBuffer.Scrollback.Clear;
   FBuffer.ResetViewport;
   FParser.Reset;
+  FHasSelectionStart := False;
   FNeedRedraw := True;
 end;
 
@@ -890,6 +893,7 @@ begin
 
   AbsY := FBuffer.ScreenYToAbsolute(Row);
   FSelectionStartAbs := TPoint.Create(StartCol, AbsY);
+  FHasSelectionStart := True;
   FBuffer.SetSelection(StartCol, AbsY, EndCol, AbsY);
   FIsSelecting := False;
   FSelectionDragOrigin := TPointF.Zero;
@@ -1126,6 +1130,7 @@ var
   Col, Row, Cb, AbsY: Integer;
   IsMouseReporting: Boolean;
   OverrideSelection: Boolean;
+  ExtendSelection: Boolean;
   ClickTick: Int64;
   IsDoubleClick: Boolean;
 begin
@@ -1172,6 +1177,8 @@ begin
 
   IsMouseReporting := MouseReportingEnabled;
   OverrideSelection := (ssShift in Shift);
+  ExtendSelection := (Button = TMouseButton.mbLeft) and
+    (ssCtrl in Shift) and (ssShift in Shift);
 
   if (Button = TMouseButton.mbRight) and FPasteOnRightClick and
     ((not IsMouseReporting) or OverrideSelection) then
@@ -1181,7 +1188,8 @@ begin
     Exit;
   end;
 
-  if IsDoubleClick and ((not IsMouseReporting) or OverrideSelection) and
+  if IsDoubleClick and (not ExtendSelection) and
+    ((not IsMouseReporting) or OverrideSelection) and
     TrySelectWordAt(Col, Row) then
     Exit;
 
@@ -1191,7 +1199,17 @@ begin
     if Button = TMouseButton.mbLeft then
     begin
       AbsY := FBuffer.ScreenYToAbsolute(Row);
-      FSelectionStartAbs := TPoint.Create(Col, AbsY);
+      if ExtendSelection and FHasSelectionStart then
+      begin
+        FBuffer.SetSelection(FSelectionStartAbs.X, FSelectionStartAbs.Y,
+          Col, AbsY);
+        FNeedRedraw := True;
+      end
+      else
+      begin
+        FSelectionStartAbs := TPoint.Create(Col, AbsY);
+        FHasSelectionStart := True;
+      end;
       FSelectionDragOrigin := TPointF.Create(X, Y);
       FSelectionDragStarted := False;
       FIsSelecting := True;
