@@ -47,12 +47,15 @@ begin
     'InitialCols',
     'InitialRows',
     'ConnectionTimeoutMs',
+    'CommandTimeoutMs',
+    'CommandOutputLimitBytes',
     'WakeOnConnect'
   ]);
 
   RegisterPropertiesInCategory(DevOpsEventsCategory, TnbSSHClient, [
     'OnStatusChange',
     'OnReadData',
+    'OnCommandCompleted',
     'OnConnecting',
     'OnAuthenticating',
     'OnConnected',
