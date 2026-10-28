@@ -21,11 +21,36 @@ Paket `nTizgin` tomonidan faol ishlatiladi. Windows x64 va Linux uchun platforma
 
 - Delphi 13.1 / RAD Studio 13.1
 - FireMonkey
+- [UniListView](https://github.com/Boboycha/UniListView) runtime paketi
+- [Ararat Synapse](https://github.com/geby/synapse) to'liq manba katalogi
 - libssh2 runtime kutubxonasi
 - libssh2 yig'ilishiga qarab OpenSSL/zlib runtime kutubxonalari
-- `Z:\VCL\synapse` ichidagi Ararat Synapse
+
+`third_party/synapse` ichida faqat `synacode.pas` bor. `blcksock`, `synsock` va
+boshqa modullar uchun to'liq Ararat Synapse katalogini Delphi Library Path yoki
+Project Search Path ichiga qo'shish kerak.
 
 ## Yig'ish
+
+Repozitoriylarni yonma-yon joylashtiring:
+
+```text
+workdir/
+|- UniListView/
+`- nbDevopsCockpit/
+```
+
+`CockpitGroup.groupproj` faylini oching. Guruh avval tanlangan platforma uchun
+`UniListViewRuntime`, keyin `nbDevOpsCockpit` va demo loyihasini yig'adi.
+
+Qo'lda yig'ishda avval ayni platforma uchun
+`UniListView/packages/UniListViewRuntime.dproj`, keyin quyidagi paketni
+yig'ing. `E2202 Required package 'UniListViewRuntime' not found` xatosi mos
+platforma DCP fayli hali yig'ilmaganini yoki uning katalogi Library Path ichida
+yo'qligini bildiradi.
+
+To'liq Ararat Synapse katalogi yo'lda bo'lmasa, kompilyator
+`Unit 'blcksock' not found` xatosi bilan to'xtaydi.
 
 Repozitoriy ichidan:
 

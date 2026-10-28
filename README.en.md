@@ -55,20 +55,43 @@ demo/   — FMX demo application showing the SSH + terminal pairing
 
 ## Dependencies
 
-Third-party libraries required to build the package (**not** bundled in the repo):
+Required dependencies:
 
 | Library | Kind | Purpose | Source |
 |---------|------|---------|--------|
-| [Ararat Synapse](http://synapse.ararat.cz/) | build-time | TCP socket (`blcksock.pas`) that libssh2 runs on top of | synapse.ararat.cz |
+| [UniListView](https://github.com/Boboycha/UniListView) | build-time and runtime | `UniListViewRuntime` package used by `TnbFilePane` | GitHub |
+| [Ararat Synapse](https://github.com/geby/synapse) | build-time | `blcksock`, `synsock`, and other network units | GitHub |
 | libssh2 | runtime | SSH protocol implementation | see "Platform requirements" |
 
-Synapse is wired in via the project search path (see the installation guide).
+Only the package's `synacode.pas` is vendored under `third_party/synapse`.
+The complete Ararat Synapse source directory must still be available through
+the Delphi Library Path or Project Search Path.
 Skia ships with RAD Studio 12 and newer — no separate installation needed.
 
 ## Installation
 
-In short: open `src/nbDevOpsCockpit.dpk` in RAD Studio, set the search paths,
-build and install the package.
+Clone the repositories as siblings:
+
+```text
+workdir/
+|- UniListView/
+`- nbDevopsCockpit/
+```
+
+Open `CockpitGroup.groupproj`. The group builds `UniListViewRuntime` for the
+selected platform before `nbDevOpsCockpit` and the demo. After a successful
+build, install `src/nbDevOpsCockpit.dpk` in the IDE.
+
+For a manual installation, first build
+`UniListView/packages/UniListViewRuntime.dproj` for the same platform (`Win32`
+for the 32-bit IDE, `Win64` for the 64-bit IDE), then build
+`src/nbDevOpsCockpit.dproj`. `E2202 Required package 'UniListViewRuntime' not
+found` means that the runtime-package DCP for the selected platform has not
+been built or its directory is missing from the Library Path.
+
+Also add the complete Ararat Synapse source directory to the Library Path or
+Project Search Path. Otherwise compilation stops with `Unit 'blcksock' not
+found`.
 
 Additional development rules are in the [Developer Guide](docs/DEVELOPER_GUIDE.md).
 

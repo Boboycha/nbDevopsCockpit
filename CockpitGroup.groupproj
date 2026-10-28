@@ -3,14 +3,14 @@
         <ProjectGuid>{CD210ECB-B844-43C7-8AFC-C5B67E4D4E41}</ProjectGuid>
     </PropertyGroup>
     <ItemGroup>
-        <Projects Include="src\nbDevOpsCockpit.dproj">
+        <Projects Include="..\UniListView\packages\UniListViewRuntime.dproj">
             <Dependencies/>
+        </Projects>
+        <Projects Include="src\nbDevOpsCockpit.dproj">
+            <Dependencies>UniListViewRuntime</Dependencies>
         </Projects>
         <Projects Include="demo\nbDevOpsCockpitDemo.dproj">
-            <Dependencies/>
-        </Projects>
-        <Projects Include="..\nbFleet\nbFleet.dproj">
-            <Dependencies/>
+            <Dependencies>nbDevOpsCockpit</Dependencies>
         </Projects>
     </ItemGroup>
     <ProjectExtensions>
@@ -20,6 +20,15 @@
             <Default.Personality/>
         </BorlandProject>
     </ProjectExtensions>
+    <Target Name="UniListViewRuntime">
+        <MSBuild Projects="..\UniListView\packages\UniListViewRuntime.dproj"/>
+    </Target>
+    <Target Name="UniListViewRuntime:Clean">
+        <MSBuild Projects="..\UniListView\packages\UniListViewRuntime.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="UniListViewRuntime:Make">
+        <MSBuild Projects="..\UniListView\packages\UniListViewRuntime.dproj" Targets="Make"/>
+    </Target>
     <Target Name="nbDevOpsCockpit">
         <MSBuild Projects="src\nbDevOpsCockpit.dproj"/>
     </Target>
@@ -38,23 +47,14 @@
     <Target Name="nbDevOpsCockpitDemo:Make">
         <MSBuild Projects="demo\nbDevOpsCockpitDemo.dproj" Targets="Make"/>
     </Target>
-    <Target Name="nbFleet">
-        <MSBuild Projects="..\nbFleet\nbFleet.dproj"/>
-    </Target>
-    <Target Name="nbFleet:Clean">
-        <MSBuild Projects="..\nbFleet\nbFleet.dproj" Targets="Clean"/>
-    </Target>
-    <Target Name="nbFleet:Make">
-        <MSBuild Projects="..\nbFleet\nbFleet.dproj" Targets="Make"/>
-    </Target>
     <Target Name="Build">
-        <CallTarget Targets="nbDevOpsCockpit;nbDevOpsCockpitDemo;nbFleet"/>
+        <CallTarget Targets="UniListViewRuntime;nbDevOpsCockpit;nbDevOpsCockpitDemo"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="nbDevOpsCockpit:Clean;nbDevOpsCockpitDemo:Clean;nbFleet:Clean"/>
+        <CallTarget Targets="nbDevOpsCockpitDemo:Clean;nbDevOpsCockpit:Clean;UniListViewRuntime:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="nbDevOpsCockpit:Make;nbDevOpsCockpitDemo:Make;nbFleet:Make"/>
+        <CallTarget Targets="UniListViewRuntime:Make;nbDevOpsCockpit:Make;nbDevOpsCockpitDemo:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

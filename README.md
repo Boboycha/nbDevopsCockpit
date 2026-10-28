@@ -51,20 +51,42 @@ demo/   — демо-приложение FMX, показывающее связ
 
 ## Зависимости
 
-Сторонние библиотеки, необходимые для сборки (в репозиторий **не входят**):
+Обязательные зависимости:
 
 | Библиотека | Тип | Назначение | Где взять |
 |------------|-----|-----------|-----------|
-| [Ararat Synapse](http://synapse.ararat.cz/) | время сборки | TCP-сокет (`blcksock.pas`), на котором работает libssh2 | synapse.ararat.cz |
+| [UniListView](https://github.com/Boboycha/UniListView) | время сборки и выполнения | runtime-пакет `UniListViewRuntime`, используемый `TnbFilePane` | GitHub |
+| [Ararat Synapse](https://github.com/geby/synapse) | время сборки | `blcksock`, `synsock` и другие сетевые модули | GitHub |
 | libssh2 | время выполнения | реализация протокола SSH | см. «Платформенные требования» |
 
-Synapse подключается через путь поиска проекта (см. инструкцию по установке).
+В `third_party/synapse` находится только используемый пакетом `synacode.pas`;
+для сборки всё равно требуется полный каталог исходников Ararat Synapse в
+Delphi Library Path или Project Search Path.
 Skia входит в состав RAD Studio 12 и новее — отдельная установка не нужна.
 
 ## Установка
 
-Кратко: открыть `src/nbDevOpsCockpit.dpk` в RAD Studio, прописать пути поиска,
-собрать и установить пакет.
+Разместите репозитории рядом:
+
+```text
+workdir/
+|- UniListView/
+`- nbDevopsCockpit/
+```
+
+Откройте `CockpitGroup.groupproj`: группа сначала собирает
+`UniListViewRuntime` для выбранной платформы, затем `nbDevOpsCockpit` и демо.
+После успешной сборки установите `src/nbDevOpsCockpit.dpk` в IDE.
+
+При ручной установке сначала соберите
+`UniListView/packages/UniListViewRuntime.dproj` для той же платформы
+(`Win32` для 32-битной IDE, `Win64` для 64-битной), затем собирайте
+`src/nbDevOpsCockpit.dproj`. Ошибка `E2202 Required package
+'UniListViewRuntime' not found` означает, что DCP runtime-пакета для выбранной
+платформы ещё не собран или его каталог отсутствует в Library Path.
+
+Перед сборкой также добавьте каталог полного Ararat Synapse в Library Path или
+Project Search Path. Иначе компилятор остановится на `Unit 'blcksock' not found`.
 
 Дополнительные правила разработки описаны в [руководстве разработчика](docs/DEVELOPER_GUIDE.md).
 
