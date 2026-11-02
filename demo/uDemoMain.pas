@@ -198,7 +198,10 @@ end;
 procedure TDemoForm.SSHError(Sender: TObject; const Msg: string);
 begin
   UpdateButtons;
-  // Ошибка уже выводится в терминал через TnbTerminalControl.HandleSSHStatusChange
+  // Терминал также выводит ошибку, но диалог гарантирует видимую обратную
+  // связь на платформах, где его перерисовка может произойти с задержкой.
+  if Msg <> '' then
+    ShowMessage('Ошибка SSH-подключения:' + sLineBreak + Msg);
 end;
 
 procedure TDemoForm.SSHDisconnected(Sender: TObject);

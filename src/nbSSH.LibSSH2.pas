@@ -280,7 +280,8 @@ begin
       raise ESSHLibError.CreateFmt(
         'Cannot load libssh2. Tried: %s.' + sLineBreak +
         'Windows: place libssh2.dll near the .exe.' + sLineBreak +
-        'Linux:   sudo dnf install libssh2.' + sLineBreak +
+        'Linux (Astra/Debian): sudo apt install libssh2-1.' + sLineBreak +
+        'Linux (RHEL/Rocky):   sudo dnf install libssh2.' + sLineBreak +
         'macOS:   brew install libssh2.', [TriedNames]);
 
     try
