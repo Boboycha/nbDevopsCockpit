@@ -75,3 +75,9 @@ Linux/macOS'da mos shared library fayllari tizim loader'iga ko'rinishi kerak.
 ## Hujjatlar
 
 - [Developer Guide](docs/DEVELOPER_GUIDE.md)
+
+## Litsenziya
+
+Loyihaning original kodi Mozilla Public License 2.0 asosida tarqatiladi.
+Ichiga kiritilgan bog'liqliklarning litsenziyalari
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) faylida ko'rsatilgan.

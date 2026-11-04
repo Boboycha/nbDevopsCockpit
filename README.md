@@ -125,3 +125,9 @@ end;
 ## Документация проекта
 
 - [Руководство разработчика](docs/DEVELOPER_GUIDE.md)
+
+## Лицензия
+
+Собственный код проекта распространяется по Mozilla Public License 2.0.
+Лицензии встроенных зависимостей перечислены в
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

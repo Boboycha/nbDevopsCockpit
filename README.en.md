@@ -130,3 +130,9 @@ The project is under active development. Planned components: `TnbGitLabClient`,
 ## Project Documentation
 
 - [Developer Guide](docs/DEVELOPER_GUIDE.md)
+
+## License
+
+Original project code is licensed under the Mozilla Public License 2.0.
+Bundled dependency licenses are listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
