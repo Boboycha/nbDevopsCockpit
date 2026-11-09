@@ -3,7 +3,8 @@ program nbDevOpsCockpitDemo;
 uses
   System.StartUpCopy,
   FMX.Forms,
-  uDemoMain in 'uDemoMain.pas' {DemoForm};
+  uDemoMain in 'uDemoMain.pas' {DemoForm},
+  uBridgeDemo in 'uBridgeDemo.pas';
 
 {$R *.res}
 

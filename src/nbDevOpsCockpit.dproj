@@ -211,6 +211,7 @@
         <DCCReference Include="nbSFTPTransfer.pas"/>
         <DCCReference Include="nbFilePane.pas"/>
         <DCCReference Include="ModernSSHClient.pas"/>
+        <DCCReference Include="nbSSH.TunnelManager.pas"/>
         <DCCReference Include="Terminal.Types.pas"/>
         <DCCReference Include="Terminal.Theme.pas"/>
         <DCCReference Include="Terminal.Buffer.pas"/>

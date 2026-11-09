@@ -42,6 +42,9 @@ lib/Win64/
 .vscode/
 .claude/
 
+# Private workspace handoff; public documentation lives under docs/.
+/SSH_BRIDGE_MIRA.md
+
 # --- Логи сборки ---
 *.log
 src/dclnbDevOpsCockpit.res

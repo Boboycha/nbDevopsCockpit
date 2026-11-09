@@ -28,7 +28,7 @@ object DemoForm: TDemoForm
   object Panel1: TPanel
     Align = MostTop
     Size.Width = 640.000000000000000000
-    Size.Height = 64.000000000000000000
+    Size.Height = 92.000000000000000000
     Size.PlatformDefault = False
     TabOrder = 0
     object CornerButton1: TCornerButton
@@ -187,6 +187,16 @@ object DemoForm: TDemoForm
       TabOrder = 9
       Text = 'Local terminal'
       OnClick = LocalClick
+    end
+    object btnSSHBridge: TCornerButton
+      Position.X = 4.000000000000000000
+      Position.Y = 64.000000000000000000
+      Size.Width = 125.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 10
+      Text = 'SSH bridge...'
+      OnClick = SSHBridgeClick
     end
   end
   object odKey: TOpenDialog

@@ -1,0 +1,512 @@
+object BridgeDemoForm: TBridgeDemoForm
+  Left = 0
+  Top = 0
+  Caption = 'SSH Bridge'
+  ClientHeight = 650
+  ClientWidth = 820
+  FormFactor.Width = 320
+  FormFactor.Height = 480
+  FormFactor.Devices = [Desktop]
+  Position = ScreenCenter
+  OnClose = FormClose
+  OnCreate = FormCreate
+  DesignerMasterStyle = 0
+  object HeaderPanel: TPanel
+    Align = MostTop
+    Size.Width = 820.000000000000000000
+    Size.Height = 150.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 0
+    object StartButton: TButton
+      Position.X = 16.000000000000000000
+      Position.Y = 12.000000000000000000
+      Size.Width = 100.000000000000000000
+      Size.Height = 32.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 0
+      Text = 'Start'
+      OnClick = StartButtonClick
+    end
+    object StopButton: TButton
+      Position.X = 124.000000000000000000
+      Position.Y = 12.000000000000000000
+      Size.Width = 100.000000000000000000
+      Size.Height = 32.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 1
+      Text = 'Stop'
+      OnClick = StopButtonClick
+    end
+    object StatusLabel: TLabel
+      Position.X = 240.000000000000000000
+      Position.Y = 17.000000000000000000
+      Size.Width = 220.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+      Text = 'Status: stopped'
+    end
+    object SessionLabel: TLabel
+      Position.X = 16.000000000000000000
+      Position.Y = 54.000000000000000000
+      Size.Width = 390.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+      Text = 'Master SSH: False    Replica SSH: False'
+    end
+    object StatisticsLabel: TLabel
+      Position.X = 420.000000000000000000
+      Position.Y = 54.000000000000000000
+      Size.Width = 380.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+      Text = 'Channels: 0    RX: 0.0 MB    TX: 0.0 MB'
+    end
+    object SpeedLabel: TLabel
+      Position.X = 420.000000000000000000
+      Position.Y = 78.000000000000000000
+      Size.Width = 380.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+      Text = 'RX: 0.0 MB/s    TX: 0.0 MB/s    Avg: 0.0 MB/s'
+    end
+    object UptimeLabel: TLabel
+      Position.X = 16.000000000000000000
+      Position.Y = 78.000000000000000000
+      Size.Width = 390.000000000000000000
+      Size.Height = 22.000000000000000000
+      Size.PlatformDefault = False
+      Text = 'Uninterrupted: --'
+    end
+    object ErrorLabel: TLabel
+      Position.X = 16.000000000000000000
+      Position.Y = 108.000000000000000000
+      Size.Width = 784.000000000000000000
+      Size.Height = 34.000000000000000000
+      Size.PlatformDefault = False
+      Text = ''
+      TextSettings.FontColor = claRed
+      TextSettings.WordWrap = True
+    end
+  end
+  object ConnectionTabs: TTabControl
+    Align = Client
+    Size.Width = 820.000000000000000000
+    Size.Height = 500.000000000000000000
+    Size.PlatformDefault = False
+    TabIndex = 0
+    TabOrder = 1
+    object MasterTab: TTabItem
+      IsSelected = True
+      Size.Width = 90.000000000000000000
+      Size.Height = 26.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 0
+      Text = 'Master SSH'
+      object MasterScroll: TVertScrollBox
+        Align = Client
+        Size.Width = 820.000000000000000000
+        Size.Height = 474.000000000000000000
+        Size.PlatformDefault = False
+        TabOrder = 0
+        object MasterHostLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 12.000000000000000000
+          Size.Width = 300.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Master SSH host'
+        end
+        object MasterHostEdit: TEdit
+          Text = ''
+          Position.X = 16.000000000000000000
+          Position.Y = 32.000000000000000000
+          Size.Width = 760.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 0
+        end
+        object MasterPortLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 74.000000000000000000
+          Size.Width = 300.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'SSH port'
+        end
+        object MasterPortEdit: TEdit
+          Text = '22'
+          Position.X = 16.000000000000000000
+          Position.Y = 94.000000000000000000
+          Size.Width = 120.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 1
+        end
+        object MasterUserLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 136.000000000000000000
+          Size.Width = 300.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'SSH user'
+        end
+        object MasterUserEdit: TEdit
+          Text = ''
+          Position.X = 16.000000000000000000
+          Position.Y = 156.000000000000000000
+          Size.Width = 760.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 2
+        end
+        object MasterPasswordLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 198.000000000000000000
+          Size.Width = 300.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Password (kept only in memory)'
+        end
+        object MasterPasswordEdit: TEdit
+          Password = True
+          Text = ''
+          Position.X = 16.000000000000000000
+          Position.Y = 218.000000000000000000
+          Size.Width = 760.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 3
+        end
+        object MasterKeyLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 260.000000000000000000
+          Size.Width = 360.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Private key file (alternative to password)'
+        end
+        object MasterKeyEdit: TEdit
+          Text = ''
+          Position.X = 16.000000000000000000
+          Position.Y = 280.000000000000000000
+          Size.Width = 704.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 4
+        end
+        object MasterKeyButton: TButton
+          Position.X = 728.000000000000000000
+          Position.Y = 280.000000000000000000
+          Size.Width = 48.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 5
+          Text = '...'
+          OnClick = MasterKeyButtonClick
+        end
+        object MasterPassphraseLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 322.000000000000000000
+          Size.Width = 340.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Key passphrase (kept only in memory)'
+        end
+        object MasterPassphraseEdit: TEdit
+          Password = True
+          Text = ''
+          Position.X = 16.000000000000000000
+          Position.Y = 342.000000000000000000
+          Size.Width = 760.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 6
+        end
+        object MasterFingerprintLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 384.000000000000000000
+          Size.Width = 420.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Expected host key fingerprint (SHA256:...)'
+        end
+        object MasterFingerprintEdit: TEdit
+          Text = ''
+          Position.X = 16.000000000000000000
+          Position.Y = 404.000000000000000000
+          Size.Width = 760.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 7
+        end
+      end
+    end
+    object ReplicaTab: TTabItem
+      IsSelected = False
+      Size.Width = 90.000000000000000000
+      Size.Height = 26.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 1
+      Text = 'Replica SSH'
+      object ReplicaScroll: TVertScrollBox
+        Align = Client
+        Size.Width = 820.000000000000000000
+        Size.Height = 474.000000000000000000
+        Size.PlatformDefault = False
+        TabOrder = 0
+        object ReplicaHostLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 12.000000000000000000
+          Size.Width = 300.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Replica SSH host'
+        end
+        object ReplicaHostEdit: TEdit
+          Text = ''
+          Position.X = 16.000000000000000000
+          Position.Y = 32.000000000000000000
+          Size.Width = 760.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 0
+        end
+        object ReplicaPortLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 74.000000000000000000
+          Size.Width = 300.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'SSH port'
+        end
+        object ReplicaPortEdit: TEdit
+          Text = '22'
+          Position.X = 16.000000000000000000
+          Position.Y = 94.000000000000000000
+          Size.Width = 120.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 1
+        end
+        object ReplicaUserLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 136.000000000000000000
+          Size.Width = 300.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'SSH user'
+        end
+        object ReplicaUserEdit: TEdit
+          Text = ''
+          Position.X = 16.000000000000000000
+          Position.Y = 156.000000000000000000
+          Size.Width = 760.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 2
+        end
+        object ReplicaPasswordLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 198.000000000000000000
+          Size.Width = 300.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Password (kept only in memory)'
+        end
+        object ReplicaPasswordEdit: TEdit
+          Password = True
+          Text = ''
+          Position.X = 16.000000000000000000
+          Position.Y = 218.000000000000000000
+          Size.Width = 760.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 3
+        end
+        object ReplicaKeyLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 260.000000000000000000
+          Size.Width = 360.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Private key file (alternative to password)'
+        end
+        object ReplicaKeyEdit: TEdit
+          Text = ''
+          Position.X = 16.000000000000000000
+          Position.Y = 280.000000000000000000
+          Size.Width = 704.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 4
+        end
+        object ReplicaKeyButton: TButton
+          Position.X = 728.000000000000000000
+          Position.Y = 280.000000000000000000
+          Size.Width = 48.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 5
+          Text = '...'
+          OnClick = ReplicaKeyButtonClick
+        end
+        object ReplicaPassphraseLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 322.000000000000000000
+          Size.Width = 340.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Key passphrase (kept only in memory)'
+        end
+        object ReplicaPassphraseEdit: TEdit
+          Password = True
+          Text = ''
+          Position.X = 16.000000000000000000
+          Position.Y = 342.000000000000000000
+          Size.Width = 760.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 6
+        end
+        object ReplicaFingerprintLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 384.000000000000000000
+          Size.Width = 420.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Expected host key fingerprint (SHA256:...)'
+        end
+        object ReplicaFingerprintEdit: TEdit
+          Text = ''
+          Position.X = 16.000000000000000000
+          Position.Y = 404.000000000000000000
+          Size.Width = 760.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 7
+        end
+      end
+    end
+    object RouteTab: TTabItem
+      IsSelected = False
+      Size.Width = 90.000000000000000000
+      Size.Height = 26.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 2
+      Text = 'Route'
+      object RouteScroll: TVertScrollBox
+        Align = Client
+        Size.Width = 820.000000000000000000
+        Size.Height = 474.000000000000000000
+        Size.PlatformDefault = False
+        TabOrder = 0
+        object ListenHostLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 12.000000000000000000
+          Size.Width = 360.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Replica remote listen host'
+        end
+        object ListenHostEdit: TEdit
+          Text = '127.0.0.1'
+          Position.X = 16.000000000000000000
+          Position.Y = 32.000000000000000000
+          Size.Width = 760.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 0
+        end
+        object ListenPortLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 74.000000000000000000
+          Size.Width = 360.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Replica remote listen port'
+        end
+        object ListenPortEdit: TEdit
+          Text = '15432'
+          Position.X = 16.000000000000000000
+          Position.Y = 94.000000000000000000
+          Size.Width = 120.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 1
+        end
+        object TargetHostLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 136.000000000000000000
+          Size.Width = 360.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Master target host'
+        end
+        object TargetHostEdit: TEdit
+          Text = '127.0.0.1'
+          Position.X = 16.000000000000000000
+          Position.Y = 156.000000000000000000
+          Size.Width = 760.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 2
+        end
+        object TargetPortLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 198.000000000000000000
+          Size.Width = 360.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Master target port'
+        end
+        object TargetPortEdit: TEdit
+          Text = '5432'
+          Position.X = 16.000000000000000000
+          Position.Y = 218.000000000000000000
+          Size.Width = 120.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          TabOrder = 3
+        end
+        object ThroughputLabel: TLabel
+          Position.X = 16.000000000000000000
+          Position.Y = 260.000000000000000000
+          Size.Width = 360.000000000000000000
+          Size.Height = 18.000000000000000000
+          Size.PlatformDefault = False
+          Text = 'Throughput profile'
+        end
+        object ThroughputComboBox: TComboBox
+          Position.X = 16.000000000000000000
+          Position.Y = 280.000000000000000000
+          Size.Width = 360.000000000000000000
+          Size.Height = 30.000000000000000000
+          Size.PlatformDefault = False
+          ItemIndex = 0
+          TabOrder = 4
+          object MaximumThroughputItem: TListBoxItem
+            IsSelected = True
+            Text = 'Maximum (1 MB buffer, 1 ms idle wait)'
+          end
+          object BalancedThroughputItem: TListBoxItem
+            Text = 'Balanced (256 KB buffer, 2 ms idle wait)'
+          end
+          object CompatibilityThroughputItem: TListBoxItem
+            Text = 'Compatibility (64 KB buffer, 5 ms idle wait)'
+          end
+        end
+      end
+    end
+  end
+  object KeyDialog: TOpenDialog
+    Filter = 'Private keys|*.pem;*.key;id_*|All files|*.*'
+    Left = 744
+    Top = 72
+  end
+  object UpdateTimer: TTimer
+    Interval = 250
+    OnTimer = UpdateTimerTimer
+    Left = 688
+    Top = 72
+  end
+end

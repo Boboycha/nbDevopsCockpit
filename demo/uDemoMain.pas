@@ -7,7 +7,7 @@ uses
   FMX.Types, FMX.Controls, FMX.Forms, FMX.Graphics, FMX.Dialogs,
   System.Actions, FMX.ActnList, ModernSSHClient, Terminal.Control,
   FMX.StdCtrls, FMX.Controls.Presentation,  GoghThemeLoader,
-  FMX.ListBox,  FMX.Edit;
+  FMX.ListBox, FMX.Edit, uBridgeDemo;
 
 type
   TDemoForm = class(TForm)
@@ -32,6 +32,7 @@ type
     btnBrowseKey: TCornerButton;
     odKey: TOpenDialog;
     btnLocalTerminal: TCornerButton;
+    btnSSHBridge: TCornerButton;
     tmrSessionState: TTimer;
     procedure FormCreate(Sender: TObject);
     procedure Button1Click(Sender: TObject);
@@ -40,6 +41,7 @@ type
     procedure cbThemeChange(Sender: TObject);
     procedure BrowseKeyClick(Sender: TObject);
     procedure LocalClick(Sender: TObject);
+    procedure SSHBridgeClick(Sender: TObject);
     procedure SessionTimer(Sender: TObject);
     procedure SSHConnecting(Sender: TObject);
     procedure SSHConnected(Sender: TObject);
@@ -106,6 +108,11 @@ begin
   except
     on E: Exception do ShowMessage(E.Message);
   end;
+end;
+
+procedure TDemoForm.SSHBridgeClick(Sender: TObject);
+begin
+  ShowBridgeDemo;
 end;
 
 procedure TDemoForm.SessionTimer(Sender: TObject);

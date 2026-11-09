@@ -47,6 +47,7 @@ contains
   nbSFTPTransfer in 'nbSFTPTransfer.pas',
   nbFilePane in 'nbFilePane.pas',
   ModernSSHClient in 'ModernSSHClient.pas',
+  nbSSH.TunnelManager in 'nbSSH.TunnelManager.pas',
   Terminal.Types in 'Terminal.Types.pas',
   Terminal.Theme in 'Terminal.Theme.pas',
   Terminal.Buffer in 'Terminal.Buffer.pas',

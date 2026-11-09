@@ -16,6 +16,7 @@ A ready-to-run Windows x64 portable demo is published in [GitHub Releases](https
 | Component | Purpose |
 |-----------|---------|
 | `TnbSSHClient` | SSH connection via `libssh2` (loaded dynamically) |
+| `TnbSSHTunnelManager` | Independent two-session SSH TCP bridge with remote/direct forwarding |
 | `TnbTerminalControl` | Visual `xterm-256color` terminal |
 | `TnbFilePane` | Local/SFTP file browser pane with themeable toolbar, rows, and drag/drop transfer hooks |
 
@@ -130,6 +131,7 @@ The project is under active development. Planned components: `TnbGitLabClient`,
 ## Project Documentation
 
 - [Developer Guide](docs/DEVELOPER_GUIDE.md)
+- [SSH Bridge](docs/SSH-BRIDGE.md)
 
 ## License
 

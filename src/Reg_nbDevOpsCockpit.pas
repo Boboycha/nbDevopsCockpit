@@ -18,6 +18,7 @@ uses
   FMX.Types,
   DesignIntf,
   ModernSSHClient,
+  nbSSH.TunnelManager,
   Terminal.Control,
   nbFilePane.Controls,
   nbVectorButton,
@@ -111,6 +112,7 @@ procedure Register;
 begin
   RegisterFmxClasses([
     TnbSSHClient,
+    TnbSSHTunnelManager,
     TnbTerminalControl,
     TnbFilePane,
     TnbToolButton,
@@ -122,6 +124,7 @@ begin
 
   RegisterComponents(PaletteName, [
     TnbSSHClient,
+    TnbSSHTunnelManager,
     TnbTerminalControl,
     TnbFilePane,
     TnbVectorButton,

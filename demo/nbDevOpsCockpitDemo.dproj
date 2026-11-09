@@ -306,6 +306,10 @@
             <Form>DemoForm</Form>
             <FormType>fmx</FormType>
         </DCCReference>
+        <DCCReference Include="uBridgeDemo.pas">
+            <Form>BridgeDemoForm</Form>
+            <FormType>fmx</FormType>
+        </DCCReference>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
@@ -1473,7 +1477,7 @@
     <Import Project="$(BDS)\Bin\CodeGear.Delphi.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Delphi.Targets')"/>
     <Import Project="$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj" Condition="Exists('$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj')"/>
     <Import Project="$(MSBuildProjectName).deployproj" Condition="Exists('$(MSBuildProjectName).deployproj')"/>
-    <Target Name="AfterBuild" Condition="'$(Platform)'=='Win64'">
-        <Copy SourceFiles="..\vendor\win64\libssh2.dll;..\vendor\win64\sk4d.dll" DestinationFolder="..\bin\demo\$(Platform)\$(Config)" SkipUnchangedFiles="true"/>
+    <Target Name="CopyWin64Runtime" AfterTargets="Build" Condition="'$(Platform)'=='Win64'">
+        <Copy SourceFiles="..\vendor\win64\libssh2.dll;..\vendor\win64\sk4d.dll" DestinationFolder="$(DCC_ExeOutput)" SkipUnchangedFiles="true"/>
     </Target>
 </Project>

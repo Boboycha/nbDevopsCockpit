@@ -1,4 +1,4 @@
-﻿# nbDevOpsCockpit
+# nbDevOpsCockpit
 
 `nbDevOpsCockpit` - Delphi FMX uchun DevOps komponentlar paketi. Unda SSH, terminal, SFTP va fayl panel komponentlari bor. Paket `nTizgin` ichida ishlatiladi.
 
@@ -7,6 +7,7 @@ Tillar: [Русский](README.md) | [English](README.en.md) | [O'zbekcha](READ
 ## Ichida nimalar bor
 
 - `TnbSSHClient` - libssh2 asosidagi SSH komponent.
+- `TnbSSHTunnelManager` - ikkita mustaqil SSH sessiyasi orqali TCP ko'prik.
 - `TnbTerminalControl` - ANSI/VT chizish va scrollback bilan FMX terminal.
 - `TnbSFTPClient` - fayl amallari uchun SFTP klient.
 - `TnbFilePane` - lokal/SFTP fayl paneli.
@@ -75,6 +76,7 @@ Linux/macOS'da mos shared library fayllari tizim loader'iga ko'rinishi kerak.
 ## Hujjatlar
 
 - [Developer Guide](docs/DEVELOPER_GUIDE.md)
+- [SSH Bridge](docs/SSH-BRIDGE.md)
 
 ## Litsenziya
 

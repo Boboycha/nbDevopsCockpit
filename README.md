@@ -3,7 +3,7 @@
 
 `TnbFilePane` supports app-driven palette colors through `ApplyColors(ABg, ASurface, ABorder, AText, AMuted, AAccent)`. nTizgin uses this so SFTP/file panes follow the active terminal theme. The last two arguments are optional for older callers.
 
-Development boundaries and integration notes are maintained in [Developer Guide](docs/DEVELOPER_GUIDE.md). Terminal behavior is tracked in [XTERM Conformance](docs/XTERM-CONFORMANCE.md).
+Development boundaries and integration notes are maintained in [Developer Guide](docs/DEVELOPER_GUIDE.md). Terminal behavior is tracked in [XTERM Conformance](docs/XTERM-CONFORMANCE.md). The independent two-session TCP tunnel is documented in [SSH Bridge](docs/SSH-BRIDGE.md).
 
 **Русский** | [English](README.en.md)
 
@@ -21,6 +21,7 @@ Development boundaries and integration notes are maintained in [Developer Guide]
 | Компонент | Назначение |
 |-----------|-----------|
 | `TnbSSHClient` | SSH-соединение через `libssh2` (динамическая загрузка библиотеки) |
+| `TnbSSHTunnelManager` | Независимый TCP-мост через две SSH-сессии с remote/direct forwarding |
 | `TnbTerminalControl` | Визуальный терминал `xterm-256color` |
 
 Компоненты регистрируются в палитре IDE на вкладке **`nb DevOps`**.
@@ -125,6 +126,7 @@ end;
 ## Документация проекта
 
 - [Руководство разработчика](docs/DEVELOPER_GUIDE.md)
+- [SSH Bridge](docs/SSH-BRIDGE.md)
 
 ## Лицензия
 

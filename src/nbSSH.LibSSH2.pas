@@ -8,6 +8,14 @@ uses
 type
   PLIBSSH2_SESSION = type Pointer;
   PLIBSSH2_CHANNEL = type Pointer;
+  PLIBSSH2_LISTENER = type Pointer;
+
+{$IF Defined(MSWINDOWS)}
+  TLibSSH2ULong = Cardinal;
+{$ELSE}
+  TLibSSH2ULong = NativeUInt;
+{$ENDIF}
+  PLibSSH2ULong = ^TLibSSH2ULong;
 
   ESSHLibError = class(Exception);
 
@@ -29,6 +37,7 @@ type
     blocking: Integer); cdecl;
   Tlibssh2_session_set_timeout = procedure(session: PLIBSSH2_SESSION;
     timeout: LongInt); cdecl;
+  Tlibssh2_session_block_directions = function(session: PLIBSSH2_SESSION): Integer; cdecl;
   Tlibssh2_keepalive_config = procedure(session: PLIBSSH2_SESSION;
     want_reply: Integer; interval: Cardinal); cdecl;
   Tlibssh2_keepalive_send = function(session: PLIBSSH2_SESSION;
@@ -52,6 +61,16 @@ type
     channel_type: PAnsiChar; channel_type_len: Cardinal;
     window_size: Cardinal; packet_size: Cardinal;
     message: PAnsiChar; message_len: Cardinal): PLIBSSH2_CHANNEL; cdecl;
+  Tlibssh2_channel_direct_tcpip_ex = function(session: PLIBSSH2_SESSION;
+    host: PAnsiChar; port: Integer; shost: PAnsiChar;
+    sport: Integer): PLIBSSH2_CHANNEL; cdecl;
+  Tlibssh2_channel_forward_listen_ex = function(session: PLIBSSH2_SESSION;
+    host: PAnsiChar; port: Integer; bound_port: PInteger;
+    queue_maxsize: Integer): PLIBSSH2_LISTENER; cdecl;
+  Tlibssh2_channel_forward_accept = function(
+    listener: PLIBSSH2_LISTENER): PLIBSSH2_CHANNEL; cdecl;
+  Tlibssh2_channel_forward_cancel = function(
+    listener: PLIBSSH2_LISTENER): Integer; cdecl;
   Tlibssh2_channel_process_startup = function(channel: PLIBSSH2_CHANNEL;
     request: PAnsiChar; request_len: Cardinal;
     message: PAnsiChar; message_len: Cardinal): Integer; cdecl;
@@ -68,6 +87,10 @@ type
     stream_id: Integer; buf: PAnsiChar; buflen: NativeUInt): NativeInt; cdecl;
   Tlibssh2_channel_write_ex = function(channel: PLIBSSH2_CHANNEL;
     stream_id: Integer; buf: PAnsiChar; buflen: NativeUInt): NativeInt; cdecl;
+  Tlibssh2_channel_window_read_ex = function(channel: PLIBSSH2_CHANNEL;
+    read_avail, window_size_initial: PLibSSH2ULong): TLibSSH2ULong; cdecl;
+  Tlibssh2_channel_window_write_ex = function(channel: PLIBSSH2_CHANNEL;
+    window_size_initial: PLibSSH2ULong): TLibSSH2ULong; cdecl;
   Tlibssh2_channel_send_eof = function(channel: PLIBSSH2_CHANNEL): Integer; cdecl;
   Tlibssh2_channel_wait_closed = function(channel: PLIBSSH2_CHANNEL): Integer; cdecl;
   Tlibssh2_channel_get_exit_status = function(channel: PLIBSSH2_CHANNEL): Integer; cdecl;
@@ -77,6 +100,12 @@ type
 
 const
   LIBSSH2_ERROR_EAGAIN = -37;
+  LIBSSH2_ERROR_CHANNEL_UNKNOWN = -23;
+  LIBSSH2_ERROR_SOCKET_SEND = -7;
+  LIBSSH2_ERROR_SOCKET_DISCONNECT = -13;
+  LIBSSH2_ERROR_SOCKET_TIMEOUT = -30;
+  LIBSSH2_ERROR_SOCKET_RECV = -43;
+  LIBSSH2_ERROR_BAD_SOCKET = -45;
   LIBSSH2_METHOD_HOSTKEY = 1;
   LIBSSH2_CHANNEL_WINDOW_DEFAULT = 2 * 1024 * 1024;
   LIBSSH2_CHANNEL_PACKET_DEFAULT = 32768;
@@ -96,6 +125,7 @@ var
   ssh2_session_last_error: Tlibssh2_session_last_error = nil;
   ssh2_session_set_blocking: Tlibssh2_session_set_blocking = nil;
   ssh2_session_set_timeout: Tlibssh2_session_set_timeout = nil;
+  ssh2_session_block_directions: Tlibssh2_session_block_directions = nil;
   ssh2_keepalive_config: Tlibssh2_keepalive_config = nil;
   ssh2_keepalive_send: Tlibssh2_keepalive_send = nil;
   ssh2_session_supported_algs: Tlibssh2_session_supported_algs = nil;
@@ -103,12 +133,18 @@ var
   ssh2_userauth_publickey_fromfile_ex: Tlibssh2_userauth_publickey_fromfile_ex = nil;
   ssh2_userauth_password_ex: Tlibssh2_userauth_password_ex = nil;
   ssh2_channel_open_ex: Tlibssh2_channel_open_ex = nil;
+  ssh2_channel_direct_tcpip_ex: Tlibssh2_channel_direct_tcpip_ex = nil;
+  ssh2_channel_forward_listen_ex: Tlibssh2_channel_forward_listen_ex = nil;
+  ssh2_channel_forward_accept: Tlibssh2_channel_forward_accept = nil;
+  ssh2_channel_forward_cancel: Tlibssh2_channel_forward_cancel = nil;
   ssh2_channel_process_startup: Tlibssh2_channel_process_startup = nil;
   ssh2_channel_request_pty_ex: Tlibssh2_channel_request_pty_ex = nil;
   ssh2_channel_request_pty_size_ex: Tlibssh2_channel_request_pty_size_ex = nil;
   ssh2_channel_setenv_ex: Tlibssh2_channel_setenv_ex = nil;
   ssh2_channel_read_ex: Tlibssh2_channel_read_ex = nil;
   ssh2_channel_write_ex: Tlibssh2_channel_write_ex = nil;
+  ssh2_channel_window_read_ex: Tlibssh2_channel_window_read_ex = nil;
+  ssh2_channel_window_write_ex: Tlibssh2_channel_window_write_ex = nil;
   ssh2_channel_send_eof: Tlibssh2_channel_send_eof = nil;
   ssh2_channel_wait_closed: Tlibssh2_channel_wait_closed = nil;
   ssh2_channel_get_exit_status: Tlibssh2_channel_get_exit_status = nil;
@@ -230,16 +266,23 @@ begin
   @ssh2_session_last_error            := ResolveProc('libssh2_session_last_error');
   @ssh2_session_set_blocking          := ResolveProc('libssh2_session_set_blocking');
   @ssh2_session_set_timeout           := ResolveProc('libssh2_session_set_timeout');
+  @ssh2_session_block_directions      := ResolveProc('libssh2_session_block_directions', False);
   @ssh2_keepalive_config              := ResolveProc('libssh2_keepalive_config', False);
   @ssh2_keepalive_send                := ResolveProc('libssh2_keepalive_send', False);
   @ssh2_session_supported_algs        := ResolveProc('libssh2_session_supported_algs');
   @ssh2_userauth_publickey_fromfile_ex:= ResolveProc('libssh2_userauth_publickey_fromfile_ex');
   @ssh2_userauth_password_ex          := ResolveProc('libssh2_userauth_password_ex');
   @ssh2_channel_open_ex               := ResolveProc('libssh2_channel_open_ex');
+  @ssh2_channel_direct_tcpip_ex       := ResolveProc('libssh2_channel_direct_tcpip_ex', False);
+  @ssh2_channel_forward_listen_ex     := ResolveProc('libssh2_channel_forward_listen_ex', False);
+  @ssh2_channel_forward_accept        := ResolveProc('libssh2_channel_forward_accept', False);
+  @ssh2_channel_forward_cancel        := ResolveProc('libssh2_channel_forward_cancel', False);
   @ssh2_channel_process_startup       := ResolveProc('libssh2_channel_process_startup');
   @ssh2_channel_request_pty_ex        := ResolveProc('libssh2_channel_request_pty_ex');
   @ssh2_channel_read_ex               := ResolveProc('libssh2_channel_read_ex');
   @ssh2_channel_write_ex              := ResolveProc('libssh2_channel_write_ex');
+  @ssh2_channel_window_read_ex         := ResolveProc('libssh2_channel_window_read_ex', False);
+  @ssh2_channel_window_write_ex        := ResolveProc('libssh2_channel_window_write_ex', False);
   @ssh2_channel_send_eof              := ResolveProc('libssh2_channel_send_eof');
   @ssh2_channel_wait_closed           := ResolveProc('libssh2_channel_wait_closed');
   @ssh2_channel_get_exit_status       := ResolveProc('libssh2_channel_get_exit_status');
