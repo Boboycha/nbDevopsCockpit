@@ -807,6 +807,12 @@ begin
       Exit;
     end;
 
+    // ConnectionTimeoutMs protects connect/handshake only. Keeping Synapse's
+    // SO_RCVTIMEO on a long-lived SSH socket turns an ordinary idle period
+    // into LIBSSH2_ERROR_SOCKET_RECV (-43).
+    FSocket.SetTimeout(0);
+    FSocket.NonBlockMode := True;
+    ssh2_session_set_timeout(FSession, 0);
     ssh2_session_set_blocking(FSession, 0);
 
     if Assigned(ssh2_keepalive_config) and Assigned(ssh2_keepalive_send) then
@@ -822,6 +828,8 @@ begin
       KeepAliveTimeoutMs := FOwner.ConnectionTimeoutMs
     else
       KeepAliveTimeoutMs := 10000;
+    if KeepAliveTimeoutMs < 60000 then
+      KeepAliveTimeoutMs := 60000;
 
     FCurrentStatus := ssConnected;
     Synchronize(DoStatusChange);
@@ -915,6 +923,12 @@ begin
 
       ProcessOutgoing;
 
+      if ReadAnything then
+      begin
+        KeepAliveBlockedSince := 0;
+        NextKeepAliveTick := TThread.GetTickCount64 + 10000;
+      end;
+
       if TThread.GetTickCount64 >= NextKeepAliveTick then
       begin
         KeepAliveNext := 0;
@@ -949,6 +963,21 @@ begin
     end;
 
   finally
+    FSocketLock.Acquire;
+    try
+      if Assigned(FSocket) then
+      begin
+        FSocket.NonBlockMode := False;
+        FSocket.SetTimeout(1000);
+      end;
+    finally
+      FSocketLock.Release;
+    end;
+    if FSession <> nil then
+    begin
+      ssh2_session_set_timeout(FSession, 1000);
+      ssh2_session_set_blocking(FSession, 1);
+    end;
     if IsExecCommand and FCommandEndedNormally and (FChannel <> nil) then
       FOwner.FCommandExitStatus := ssh2_channel_get_exit_status(FChannel);
     if FChannel <> nil then
