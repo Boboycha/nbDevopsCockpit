@@ -450,7 +450,9 @@ begin
   for I := FInstances.Count - 1 downto 0 do
   begin
     Pane := FInstances[I];
-    if (Pane = nil) or (not Pane.Visible) then
+    (* Visible относится только к самой панели. Панель внутри скрытой вкладки
+       сохраняет Visible=True и не должна перехватывать drop по координатам. *)
+    if (Pane = nil) or (not Pane.ParentedVisible) then
       Continue;
     TopLeft := Pane.LocalToScreen(PointF(0, 0));
     Bounds := RectF(TopLeft.X, TopLeft.Y,
@@ -1351,30 +1353,33 @@ end;
 procedure TnbFilePane.HandleListMouseUp(Button: TMouseButton;
   Shift: TShiftState; X, Y: Single);
 var
+  Source: TnbFilePane;
   ScreenPt: TPointF;
   Target: TnbFilePane;
 begin
-  if (Button <> TMouseButton.mbLeft) or (FDragSource <> Self)
-    or (not FDragArmed) then Exit;
+  Source := FDragSource;
+  if (Button <> TMouseButton.mbLeft) or (Source = nil)
+    or (not Source.FDragArmed) then Exit;
   try
-    if FDragging then
+    if Source.FDragging then
     begin
       ScreenPt := FList.LocalToScreen(PointF(X, Y));
       Target := PaneAtScreenPoint(ScreenPt);
-      if (Target <> nil) and (Target <> Self) and Assigned(Target.FOnFileDrop) then
+      if (Target <> nil) and (Target <> Source)
+        and Assigned(Target.FOnFileDrop) then
       begin
         Target.SetDropIndicatorVisible(False);
         ClearDropIndicator;
         SetDraggingCursor(False);
         Application.ProcessMessages;
-        Target.FOnFileDrop(Target, Self);
+        Target.FOnFileDrop(Target, Source);
       end;
     end;
   finally
     ClearDropIndicator;
     SetDraggingCursor(False);
-    FDragArmed := False;
-    FDragging := False;
+    Source.FDragArmed := False;
+    Source.FDragging := False;
     FDragSource := nil;
   end;
 end;
