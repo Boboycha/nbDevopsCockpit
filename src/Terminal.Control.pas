@@ -524,14 +524,15 @@ end;
 
 procedure TnbTerminalControl.Paint;
 var
-  ScreenSvc: IFMXScreenService;
   DPIScale: Single;
   ControlScale: Single;
 begin
   inherited;
-  DPIScale := 1.0;
-  if TPlatformServices.Current.SupportsPlatformService(IFMXScreenService, ScreenSvc) then
-    DPIScale := ScreenSvc.GetScreenScale;
+  // The canvas tracks the current window backing scale on each monitor.
+  // The global screen service reports the primary display on macOS.
+  DPIScale := Canvas.Scale;
+  if DPIScale <= 0 then
+    DPIScale := 1.0;
 
   ControlScale := Max(Abs(AbsoluteScale.X), Abs(AbsoluteScale.Y));
   if ControlScale <= 0 then

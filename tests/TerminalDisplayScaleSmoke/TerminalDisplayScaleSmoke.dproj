@@ -1,0 +1,17 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ProjectGuid>{E2D5E4FD-4BA0-4C9A-9283-0D93C616EB6D}</ProjectGuid>
+    <MainSource>TerminalDisplayScaleSmoke.dpr</MainSource>
+    <Base>True</Base><Config>Debug</Config><Platform>OSXARM64</Platform>
+    <AppType>Application</AppType><FrameworkType>FMX</FrameworkType>
+    <ProjectVersion>20.5</ProjectVersion>
+    <DCC_Namespace>System;Xml;Data;FMX</DCC_Namespace>
+    <SYNAPSE_ROOT Condition="'$(SYNAPSE_ROOT)'==''">..\..\third_party\synapse</SYNAPSE_ROOT>
+    <DCC_UnitSearchPath>..\..\src;..\..\third_party\FMXRichMemo;$(SYNAPSE_ROOT);$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+    <DCC_ExeOutput>..\..\_build_verify\TerminalDisplayScaleSmoke\$(Platform)</DCC_ExeOutput>
+    <DCC_DcuOutput>$(DCC_ExeOutput)\dcu</DCC_DcuOutput>
+    <DCC_GenerateStackFrames>true</DCC_GenerateStackFrames><BT_BuildType>Debug</BT_BuildType>
+  </PropertyGroup>
+  <ItemGroup><DelphiCompile Include="$(MainSource)"><MainSource>MainSource</MainSource></DelphiCompile></ItemGroup>
+  <Import Project="$(BDS)\Bin\CodeGear.Delphi.Targets" />
+</Project>
